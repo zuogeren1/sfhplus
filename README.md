@@ -17,9 +17,11 @@ SlimefunHelper-26.x/
 
 ## 构建
 
+本仓库没有自己的 Gradle wrapper，一律用**宿主仓库根**的 `gradlew` 加 `-p plugin`：
+
 ```bash
 export JAVA_HOME='/f/Program Files/Zulu/zulu-25'
-./gradlew :26.2:compileJava :26.1.2:compileJava :26.3:compileJava --console=plain
+./gradlew -p plugin :26.2:compileJava :26.1.2:compileJava :26.3:compileJava --console=plain
 ```
 
 宿主侧 `./gradlew :26.2:runClient` 会自动构建本插件并把 jar 放进 `run/26.2/mods`。
