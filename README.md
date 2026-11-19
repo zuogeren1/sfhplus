@@ -29,3 +29,10 @@ export JAVA_HOME='/f/Program Files/Zulu/zulu-25'
 ## 版本
 
 `mod_version` 在 `gradle.properties`，只适配宿主版本，不随宿主号变化。
+
+## 许可
+
+[CC0 1.0 Universal](LICENSE)（公有领域贡献）。
+
+第三方代码与资源的归属见 [`src/main/resources/NOTICE`](src/main/resources/NOTICE)，
+它们保留原始许可，不因位于本仓库而改为 CC0。
