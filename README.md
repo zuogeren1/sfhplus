@@ -20,7 +20,7 @@ SlimefunHelper-26.x/
 本仓库没有自己的 Gradle wrapper，一律用**宿主仓库根**的 `gradlew` 加 `-p plugin`：
 
 ```bash
-export JAVA_HOME='/f/Program Files/Zulu/zulu-25'
+export JAVA_HOME=<JDK 25 的安装目录>
 ./gradlew -p plugin :26.2:compileJava :26.1.2:compileJava :26.3:compileJava --console=plain
 ```
 
