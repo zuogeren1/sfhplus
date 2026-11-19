@@ -1,0 +1,14 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "me.zuogeren.slimefunhelperplus.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [],
+	"client": [
+		"ClickGuiTakeoverMixin",
+		"AttrKeyValueDropdownMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

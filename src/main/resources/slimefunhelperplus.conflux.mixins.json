@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "me.zuogeren.slimefunhelperplus.module.conflux.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"ConfluxMapScreenMixin",
+		"ConfluxMenuControllerMixin",
+		"ConfluxMinimapHudMixin",
+		"ConfluxMinimapRadarMixin",
+		"ConfluxWaypointSaveMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
