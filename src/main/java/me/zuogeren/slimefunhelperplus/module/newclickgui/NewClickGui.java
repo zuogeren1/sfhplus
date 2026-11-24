@@ -1,7 +1,7 @@
 package me.zuogeren.slimefunhelperplus.module.newclickgui;
 
-import me.matl114.accessors.gui.ScreenAccess;
 import me.matl114.hacks.api.BaseModule;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.hacks.api.ModulePath;
 import me.matl114.hacks.utils.HotKeyUtils;
 import me.matl114.managers.config.DoubleRef;
@@ -12,7 +12,6 @@ import me.matl114.managers.config.NBTRef;
 import me.matl114.managers.input.MultiKeyBind;
 import me.matl114.managers.Configs;
 import me.zuogeren.slimefunhelperplus.config.PluginConfig;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldClickGuiScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
 import net.minecraft.client.Minecraft;
@@ -92,6 +91,11 @@ public class NewClickGui extends BaseModule {
         return ELEMENT_FACTORY;
     }
 
+    /** 取当前激活风格用于宿主二级弹窗的外观工厂；未指定时退回宿主默认工厂。 */
+    public static me.matl114.gui.interfaces.ElementFactory popupFactory(Settings s) {
+        return GuiStyles.getOrDefault(style()).elementFactory(s, ELEMENT_FACTORY);
+    }
+
     public static Settings settings() {
         if (settings == null) {
             settings = new Settings(PluginConfig.get());
@@ -142,7 +146,7 @@ public class NewClickGui extends BaseModule {
         if (minecraft == null) {
             return;
         }
-        ScreenAccess.of(GuiStyles.getOrDefault(style()).openMain(settings())).openFromCurrent();
+        HostScreens.open(GuiStyles.getOrDefault(style()).openMain(settings()));
     }
 
     private void openGui() {

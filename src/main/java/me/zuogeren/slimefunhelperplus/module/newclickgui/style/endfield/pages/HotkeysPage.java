@@ -16,6 +16,7 @@ import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
@@ -86,7 +87,7 @@ public class HotkeysPage extends EndfieldModuleConfigScreen {
 
     @Override
     protected void paintTool(
-            VDrawContext ctx, Ef.Palette p, int x, int y, int width, int mouseX, int mouseY) {
+            VDrawContext ctx, EfCanvas.Palette p, int x, int y, int width, int mouseX, int mouseY) {
         int boxW = searchBoxWidth();
         if (searchBox != null) {
             searchBox.setTextColor(p.ink());

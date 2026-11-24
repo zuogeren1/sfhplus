@@ -9,7 +9,6 @@ import me.matl114.gui.basic.InputHandler;
 import me.matl114.gui.basic.RenderHandler;
 import me.matl114.gui.basic.SubScreenWidget;
 import me.matl114.gui.interfaces.ElementFactory;
-import me.matl114.renderer.TextRenderers;
 import me.matl114.renderer.text.TextDrawer;
 import me.matl114.utils.config.AttrKeyValue;
 import me.matl114.versioned.api.VDrawContext;
@@ -199,8 +198,7 @@ public final class AttrKeyValueDropdownWidget {
 
     /** 说明框的字体：跟随当前文字绘制器；自造字体（画在自己贴图上的）退回原版字体。 */
     private static Font tooltipFont() {
-        Font font = TextRenderers.get().unwrap();
-        return font != null ? font : Minecraft.getInstance().font;
+        return HostControls.tooltipFont();
     }
 
     /** 按像素宽度裁成省略号；放得下就原样返回。 */

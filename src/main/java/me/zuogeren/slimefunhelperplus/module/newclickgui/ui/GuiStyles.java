@@ -3,10 +3,12 @@ package me.zuogeren.slimefunhelperplus.module.newclickgui.ui;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldClickGuiScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.pages.EndfieldPages;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.Identifier;
 
 /**
@@ -26,11 +28,10 @@ public final class GuiStyles {
     static {
         register(new GuiStyle(
                 ENDFIELD,
-                Ef.DARK,
-                Ef.LIGHT,
                 EndfieldClickGuiScreen::new,
                 EndfieldPages::create,
-                EndfieldModuleConfigScreen::new));
+                EndfieldModuleConfigScreen::new,
+                null));
     }
 
     private GuiStyles() {}
@@ -61,6 +62,17 @@ public final class GuiStyles {
             }
         }
         return STYLES.get(ENDFIELD);
+    }
+
+    /** 同窗口切换顶部分类页：统一经过风格注册表，不直接实例化具体风格页。 */
+    public static boolean switchTab(Screen current, String targetKey, Settings settings) {
+        GuiStyle style = getOrDefault(NewClickGui.style());
+        Screen next = "Module".equals(targetKey) ? style.openMain(settings) : style.openPage(targetKey, settings);
+        if (next == null) {
+            return false;
+        }
+        HostScreens.switchTo(current, next);
+        return true;
     }
 
     public static List<GuiStyle> values() {

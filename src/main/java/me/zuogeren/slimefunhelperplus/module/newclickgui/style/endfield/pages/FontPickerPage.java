@@ -11,8 +11,10 @@ import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
 import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EfWidget;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldWidgets;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
+import me.zuogeren.slimefunhelperplus.ui.EfWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
@@ -73,7 +75,7 @@ public class FontPickerPage extends GenericScreen {
         return settings != null && settings.light();
     }
 
-    private Ef.Palette pal() {
+    private EfCanvas.Palette pal() {
         return Ef.palette(light()).withAlpha(NewClickGui.opacity());
     }
 
@@ -215,7 +217,7 @@ public class FontPickerPage extends GenericScreen {
     // ------------------------------------------------------------------ 绘制
 
     private void paint(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         buildRows();
         hovered = null;
 
@@ -228,7 +230,7 @@ public class FontPickerPage extends GenericScreen {
     }
 
     private void paintBar(VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         Ef.fill(ctx, winX, winY, winW, BAR_H, p.barBg());
         Ef.fill(ctx, winX, winY, winW, 3, p.signal());
 
@@ -250,7 +252,7 @@ public class FontPickerPage extends GenericScreen {
         }
     }
 
-    private void paintSearch(VDrawContext ctx, Ef.Palette p) {
+    private void paintSearch(VDrawContext ctx, EfCanvas.Palette p) {
         int y = searchTop();
         Ef.fill(ctx, winX, y, winW, SEARCH_H, p.panel());
         Ef.rule(ctx, winX, y + SEARCH_H - 1, winW, p.rule());
@@ -274,7 +276,7 @@ public class FontPickerPage extends GenericScreen {
         }
     }
 
-    private void paintBody(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintBody(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         int top = bodyTop();
         int height = bodyHeight();
         Ef.fill(ctx, winX, top, winW, height, p.paper());
@@ -302,7 +304,7 @@ public class FontPickerPage extends GenericScreen {
     }
 
     private void paintRow(
-            VDrawContext ctx, Ef.Palette p, Row row, String currentPath, int mouseX, int mouseY) {
+            VDrawContext ctx, EfCanvas.Palette p, Row row, String currentPath, int mouseX, int mouseY) {
         LocalFontTextDrawer.FontFile font = row.font;
         String path = font.path().toAbsolutePath().normalize().toString();
         boolean current = !currentPath.isEmpty() && path.equals(currentPath);
@@ -334,28 +336,19 @@ public class FontPickerPage extends GenericScreen {
         Ef.rule(ctx, contentLeft - 4, row.y + ROW_H - 1, contentWidth + 8, Ef.alpha(p.rule(), 0.55F));
     }
 
-    private void paintFooter(VDrawContext ctx, Ef.Palette p) {
-        int y = winY + winH - FOOT_H;
-        Ef.fill(ctx, winX, y, winW, FOOT_H, p.panel());
-        Ef.rule(ctx, winX, y, winW, p.rule());
-
-        String current = selectedPath().isEmpty() ? "未选择" : fileNameOf(selectedPath());
-        String left = fonts().size() + " 个字体 │ 当前 " + current;
-        Ef.text(ctx, Ef.ellipsis(left, winW - 16 - Ef.textWidth("单击选用 │ Esc 返回") - 12), winX + 8, y + 3, p.ink2());
-
+    private void paintFooter(VDrawContext ctx, EfCanvas.Palette p) {
         String hint = "单击选用 │ Esc 返回";
-        Ef.text(ctx, hint, winX + winW - 8 - Ef.textWidth(hint), y + 3, p.ink2());
+        String current = selectedPath().isEmpty() ? "未选择" : fileNameOf(selectedPath());
+        String left = Ef.ellipsis(fonts().size() + " 个字体 │ 当前 " + current,
+                winW - 16 - Ef.textWidth(hint) - 12);
+        EndfieldWidgets.paintFooterBar(ctx, p, winX, winY, winW, winH, FOOT_H, left, hint);
     }
 
-    private void paintFrame(VDrawContext ctx, Ef.Palette p) {
-        int edge = p.ink();
-        Ef.fill(ctx, winX, winY, winW, 1, edge);
-        Ef.fill(ctx, winX, winY + winH - 1, winW, 1, edge);
-        Ef.fill(ctx, winX, winY, 1, winH, edge);
-        Ef.fill(ctx, winX + winW - 1, winY, 1, winH, edge);
+    private void paintFrame(VDrawContext ctx, EfCanvas.Palette p) {
+        EndfieldWidgets.paintWindowFrame(ctx, p, winX, winY, winW, winH);
     }
 
-    private void paintTip(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintTip(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         if (hovered == null) {
             return;
         }

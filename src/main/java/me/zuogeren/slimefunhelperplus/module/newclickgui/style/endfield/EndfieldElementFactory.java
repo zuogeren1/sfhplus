@@ -3,7 +3,6 @@ package me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
-import me.matl114.gui.Constants;
 import me.matl114.gui.basic.AbstractElement;
 import me.matl114.gui.basic.ButtonAction;
 import me.matl114.gui.basic.ColorSampler;
@@ -23,7 +22,9 @@ import me.matl114.utils.config.ValueAccessor;
 import me.matl114.utils.config.WrapperFactory;
 import me.matl114.utils.ChatUtils;
 import me.matl114.versioned.api.VDrawContext;
+import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +36,7 @@ import org.jetbrains.annotations.Nullable;
  * 混在自绘的配置页里一眼就能看出是两套东西。
  *
  * <p>这里只换外观，不换能力：控件仍是宿主那几个元素类（输入框、滑动输入、选择背景），
- * 所以输入法、光标、拖动、校验这些行为一个都不用重写；配色与几何改从 {@link Ef.Palette} 取。
+ * 所以输入法、光标、拖动、校验这些行为一个都不用重写；配色与几何改从 {@link EfCanvas.Palette} 取。
  */
 public final class EndfieldElementFactory implements ElementFactory {
     /** 开关本体宽：与配置页行尾那个小开关同一个尺寸。 */
@@ -60,7 +61,7 @@ public final class EndfieldElementFactory implements ElementFactory {
         this.rowRight = rowRight;
     }
 
-    private Ef.Palette pal() {
+    private EfCanvas.Palette pal() {
         return Ef.palette(light).withAlpha(NewClickGui.opacity());
     }
 
@@ -218,7 +219,7 @@ public final class EndfieldElementFactory implements ElementFactory {
                 int h = widget.getTextureHeight();
                 boolean on = active.getAsBoolean();
                 boolean usable = enable.getAsBoolean();
-                Ef.Palette p = pal();
+                EfCanvas.Palette p = pal();
                 // 激活态不整块填色：按钮宽度常常是整行，填满会变成一大块色板，
                 // 与行里那些小控件完全不是一套东西。用描边 + 左侧一条强调线表示。
                 if (shouldHighlight) {
@@ -275,7 +276,7 @@ public final class EndfieldElementFactory implements ElementFactory {
                     boolean shouldHighlight) {
                 int h = widget.getTextureHeight();
                 boolean on = accessor.getValue();
-                Ef.Palette p = pal();
+                EfCanvas.Palette p = pal();
                 int right = switchRight(widget);
                 int sx = right - SWITCH_W;
                 int sy = (h - 9) / 2;
@@ -406,15 +407,15 @@ public final class EndfieldElementFactory implements ElementFactory {
                     boolean shouldHighlight) {
                 int w = widget.getTextureWidth();
                 int h = widget.getTextureHeight();
-                Ef.Palette p = pal();
+                EfCanvas.Palette p = pal();
                 if (shouldHighlight) {
                     Ef.cutFill(context, 0, 0, w, h, p.chip(), Ef.CUT);
                 }
-                Ef.icon(context, Constants.LIST_TAG_SPRITE, 0, 0, Math.min(w, h),
+                Ef.icon(context, HostControls.listTagIcon(), 0, 0, Math.min(w, h),
                         shouldHighlight ? p.ink() : p.ink2());
             }
         };
-        return element.withTooltips(TooltipHandler.of(Constants.openListEditTooltips()));
+        return element.withTooltips(TooltipHandler.of(HostControls.openListEditTooltips()));
     }
 
     @Override

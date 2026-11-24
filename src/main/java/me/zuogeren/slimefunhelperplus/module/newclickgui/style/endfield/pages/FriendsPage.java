@@ -3,7 +3,9 @@ package me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.pages;
 import java.util.List;
 import me.matl114.hacks.api.BaseModule.WrapperConfigRef;
 import me.matl114.hacks.modules.combat.TargetSelector;
+import me.zuogeren.slimefunhelperplus.hostgui.HostEditors;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.PageActions.Action;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
 
@@ -51,6 +53,6 @@ public class FriendsPage extends EndfieldModuleConfigScreen {
                 count + " 人",
                 "编辑",
                 "打开宿主的好友名单界面：增删好友、设置别名。保存后这里的人数会跟着变。",
-                () -> selector.openEditFriendsScreen(NewClickGui.elementFactory())));
+                () -> HostEditors.openFriends(selector, NewClickGui.popupFactory(settings))));
     }
 }

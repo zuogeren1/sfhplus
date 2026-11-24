@@ -1,27 +1,31 @@
 package me.zuogeren.slimefunhelperplus.module.newclickgui.ui;
 
 import java.util.function.Function;
+import me.matl114.gui.interfaces.ElementFactory;
 import me.matl114.hacks.api.BaseModule;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.Identifier;
 
 /**
- * 一套界面风格：一个 id，加它自己的配色与屏工厂。
+ * 一套界面风格：一个 id，加上它自己的主屏、分类页、模块配置页与可选弹窗工厂。
  *
- * <p>风格是整套切换的，不做逐项混搭——切角、强调色、宽体拉伸是配套的，拆开调只会得到两边都不像的结果。
- * 明暗仍在风格内部单独切，所以每套风格都要给两份 {@link Ef.Palette}。
- *
- * <p>屏工厂也归风格：不同风格对控件的重写程度不同，各写各的屏比在一套屏里塞分支干净。
- * 主屏与分类页都从这里取，界面代码不直接 {@code new} 具体屏。
+ * <p>跨风格契约完全不感知具体主题的颜色字段或几何参数，切角、圆角、调色板等视觉定义全部收敛在
+ * 各自 {@code style/<名称>/} 包内。宿主预设弹窗的外观工厂由风格按需提供，未提供时退回宿主默认工厂。
  */
 public record GuiStyle(
         Identifier id,
-        Ef.Palette dark,
-        Ef.Palette light,
         Function<Settings, Screen> mainScreen,
         PageFactory pages,
-        ModuleConfigFactory moduleConfig) {
+        ModuleConfigFactory moduleConfig,
+        Function<Settings, ElementFactory> popupElementFactory) {
+
+    public GuiStyle(
+            Identifier id,
+            Function<Settings, Screen> mainScreen,
+            PageFactory pages,
+            ModuleConfigFactory moduleConfig) {
+        this(id, mainScreen, pages, moduleConfig, null);
+    }
 
     /** 顶部分类 → 该风格下的一页；没做的分类返回 {@code null}，由调用方退回宿主的旧页面。 */
     @FunctionalInterface
@@ -33,11 +37,6 @@ public record GuiStyle(
     @FunctionalInterface
     public interface ModuleConfigFactory {
         Screen create(BaseModule module, Settings settings);
-    }
-
-    /** 按当前明暗取这一套风格下的样式。 */
-    public Ef.Palette palette(boolean light) {
-        return light ? this.light : this.dark;
     }
 
     /** 打开这一套风格的主屏。 */
@@ -53,5 +52,11 @@ public record GuiStyle(
     /** 打开某个模块的配置页：控件外观同样归风格。 */
     public Screen openModuleConfig(BaseModule module, Settings settings) {
         return moduleConfig == null ? null : moduleConfig.create(module, settings);
+    }
+
+    /** 取这一套风格给宿主二级弹窗用的外观工厂；未显式提供时退回调用方传入的默认工厂。 */
+    public ElementFactory elementFactory(Settings settings, ElementFactory fallback) {
+        ElementFactory factory = popupElementFactory == null ? null : popupElementFactory.apply(settings);
+        return factory != null ? factory : fallback;
     }
 }

@@ -45,7 +45,7 @@ public class CustomModelModule extends BaseModule {
      *
      * <p>宿主 ClickGui 对 {@code StringRef} 一律画文本框，只有 {@code EnumAttrKeyValue} 走下拉；
      * 而配置项必须经 {@code builder(...)} 才会登记进界面，那条路固定产出 {@code StringRef}。
-     * 所以宿主侧保持文本框，下拉只在 newclickgui 里提供（见 {@code registerStringChoices}）。
+     * 所以宿主侧保持文本框，下拉只在 newclickgui / 候选表里提供（见 {@code StringChoicesRegistry}）。
      */
     public final StringRef model = builder(root.add("model"), String.class)
             .defaultValue("")
@@ -107,9 +107,9 @@ public class CustomModelModule extends BaseModule {
     public CustomModelModule() {
         super("CustomModel");
         bindFlag(enable);
-        // newclickgui 的下拉读这张表；宿主 ClickGui 走 StringChoiceRef 的 keyValue，不需要注册
-        me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen
-                .registerStringChoices(root.add("model").asString(), CustomModelModule::modelChoices);
+        // 候选列表写进插件侧注册表，宿主侧与各界面风格共用
+        me.zuogeren.slimefunhelperplus.hostgui.StringChoicesRegistry
+                .register(root.add("model").asString(), CustomModelModule::modelChoices);
     }
 
     @Override

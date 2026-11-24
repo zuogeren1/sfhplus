@@ -9,7 +9,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import me.matl114.accessors.gui.ScreenAccess;
 import me.matl114.gui.GenericScreen;
 import me.matl114.gui.basic.DrawableWidget;
 import me.matl114.hacks.api.BaseModule;
@@ -18,15 +17,17 @@ import me.matl114.hacks.api.ModuleGroup;
 import me.matl114.hacks.api.ViewModuleGroup;
 import me.matl114.hacks.modules.HackModules;
 import me.matl114.hacks.modules.task.ClickGui;
-import me.matl114.hacks.utils.gui.ClassicClickGuiScreen;
 import me.matl114.managers.config.FlagRef;
 import me.matl114.utils.ChatUtils;
 import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
+import me.zuogeren.slimefunhelperplus.hostgui.HostEditors;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.pages.EndfieldPages;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
+import me.zuogeren.slimefunhelperplus.ui.EfWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -118,7 +119,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
         return settings != null && settings.light();
     }
 
-    private Ef.Palette pal() {
+    private EfCanvas.Palette pal() {
         return Ef.palette(light()).withAlpha(NewClickGui.opacity());
     }
 
@@ -241,17 +242,11 @@ public class EndfieldClickGuiScreen extends GenericScreen {
         // 先走插件自己的新页面；还没做的分类再退回宿主那一页
         Screen ours = GuiStyles.getOrDefault(NewClickGui.style()).openPage(key, settings);
         if (ours != null) {
-            ScreenAccess.of(ours).openFromCurrent();
+            HostScreens.open(ours);
             return;
         }
         Function<Screen, DrawableWidget> page = extraSelections().get(key);
-        if (page == null) {
-            return;
-        }
-        Map<String, Function<Screen, DrawableWidget>> one = new LinkedHashMap<>();
-        one.put(key, page);
-        Screen screen = new ClassicClickGuiScreen(one, NewClickGui.elementFactory());
-        ScreenAccess.of(screen).openFromCurrent();
+        HostEditors.openClassicPage(key, page, NewClickGui.popupFactory(settings));
     }
 
     private static boolean isOn(BaseModule module) {
@@ -434,14 +429,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
     }
 
     private void paintFrame(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
-        int w = self.getTextureWidth();
-        int h = self.getTextureHeight();
-        int edge = p.ink();
-        Ef.fill(ctx, 0, 0, w, 1, edge);
-        Ef.fill(ctx, 0, h - 1, w, 1, edge);
-        Ef.fill(ctx, 0, 0, 1, h, edge);
-        Ef.fill(ctx, w - 1, 0, 1, h, edge);
+        EndfieldWidgets.paintWindowFrame(ctx, pal(), 0, 0, self.getTextureWidth(), self.getTextureHeight());
     }
 
     // ------------------------------------------------------------------ 命令栏
@@ -449,7 +437,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
     private void paintBar(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
         int mx = (int) (mouseX - self.x());
         int my = (int) (mouseY - self.y());
-        tabBar.paint(ctx, 0, 0, self.getTextureWidth(), "Module", light(), mx, my);
+        tabBar.paint(ctx, pal(), 0, 0, self.getTextureWidth(), "Module", light(), mx, my);
     }
 
     private boolean clickBar(EfWidget self, double mouseX, double mouseY, int button) {
@@ -471,9 +459,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
 
     /** 切到另一个分类：同一个窗口里换内容，不是再叠一层屏。 */
     private void switchToPage(String key) {
-        Screen next = GuiStyles.getOrDefault(NewClickGui.style()).openPage(key, settings);
-        if (next != null) {
-            ScreenAccess.of(this).switchToScreen(next);
+        if (GuiStyles.switchTab(this, key, settings)) {
             return;
         }
         openHostPage(key);
@@ -483,7 +469,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
     // ------------------------------------------------------------------ 分组列
 
     private void paintRail(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         int w = self.getTextureWidth();
         int h = self.getTextureHeight();
         int mx = (int) (mouseX - self.x());
@@ -610,7 +596,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
     }
 
     private void paintMain(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         int w = self.getTextureWidth();
         int h = self.getTextureHeight();
         int my = (int) (mouseY - self.y());
@@ -670,7 +656,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
 
     private void paintRow(
             VDrawContext ctx,
-            Ef.Palette p,
+            EfCanvas.Palette p,
             int w,
             int y,
             BaseModule module,
@@ -802,7 +788,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
     // ------------------------------------------------------------------ 详情
 
     private void paintDetail(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         int w = self.getTextureWidth();
         int h = self.getTextureHeight();
         int mx = (int) (mouseX - self.x());
@@ -820,7 +806,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
         }
         hoverDetail = over;
         // 看板按"朝向中间那块"切角：这块在右侧，所以切左下
-        Ef.cutFill(ctx, px, py, pw, ph, p.panel(), p.cutPanel(), Ef.Corner.BL);
+        Ef.cutFill(ctx, px, py, pw, ph, p.panel(), p.cutPanel(), EfCanvas.Corner.BL);
         float tabT = over ? Ef.mech(Ef.progress(hoverDetailStart, 400.0F)) : 0.0F;
         int lead = Math.max(8, pw / 7);
         Ef.fill(ctx, px, py, lead + Math.round((pw - lead) * tabT), 3, p.ink());
@@ -912,7 +898,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
             hoverButton = overBtn;
             float wipe = overBtn ? Ef.mech(Ef.progress(hoverButtonStart, 280.0F)) : 0.0F;
             // 主要按钮：静止墨底，悬停时强调色从左擦入，字在色块经过时翻成墨色
-            Ef.wipeCut(ctx, btnX, btnY, btnW, btnH, p.ink(), p.signal(), wipe, p.cutWide(), Ef.Corner.BR);
+            Ef.wipeCut(ctx, btnX, btnY, btnW, btnH, p.ink(), p.signal(), wipe, p.cutWide(), EfCanvas.Corner.BR);
             int front = Math.round(btnW * wipe);
             Ef.text(ctx, "打开配置", btnX + 6, btnY + (btnH - lh) / 2 + 1, front > 6 ? p.ink() : p.paper());
         } finally {
@@ -937,16 +923,15 @@ public class EndfieldClickGuiScreen extends GenericScreen {
 
     /** 打开本插件自己的配置页；仍留在新界面里，不跳回旧布局。 */
     private void openConfig(BaseModule module) {
-        // openFromCurrent 会把当前屏设成 parent，宿主在 onClose 里把 setScreen 重定向回 parent，
+        // HostScreens.open 会把当前屏设成 parent，宿主在 onClose 里把 setScreen 重定向回 parent，
         // 所以"返回"不用自己管。
-        ScreenAccess.of(GuiStyles.getOrDefault(NewClickGui.style()).openModuleConfig(module, settings))
-                .openFromCurrent();
+        HostScreens.open(GuiStyles.getOrDefault(NewClickGui.style()).openModuleConfig(module, settings));
     }
 
     // ------------------------------------------------------------------ 状态条
 
     private void paintFooter(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         int w = self.getTextureWidth();
         Ef.fill(ctx, 0, 0, w, FOOT_H, p.panel());
         Ef.rule(ctx, 0, 0, w, p.rule());

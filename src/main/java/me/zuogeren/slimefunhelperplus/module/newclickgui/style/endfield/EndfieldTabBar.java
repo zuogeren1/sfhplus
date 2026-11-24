@@ -2,6 +2,7 @@ package me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield;
 
 import java.util.List;
 import me.matl114.versioned.api.VDrawContext;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 
 /**
  * 顶部分类条：主屏与各分类页共用的一条命令栏。
@@ -89,11 +90,11 @@ public final class EndfieldTabBar {
         barH = Math.max(BAR_MIN, y + 19);
     }
 
-    /** 画整条命令栏；{@code activeKey} 是这一屏自己的分类。 */
+    /** 画整条命令栏；{@code activeKey} 是这一屏自己的分类，配色由所属屏幕传入。 */
     public void paint(
-            VDrawContext ctx, int x, int y, int winW, String activeKey, boolean light, int mouseX, int mouseY) {
+            VDrawContext ctx, EfCanvas.Palette p, int x, int y, int winW, String activeKey, boolean light,
+            int mouseX, int mouseY) {
         layout(winW, light);
-        Ef.Palette p = Ef.palette(light);
         int h = barH;
         Ef.fill(ctx, x, y, winW, h, p.barBg());
         paintTriBar(ctx, p, x, y, winW);
@@ -171,7 +172,7 @@ public final class EndfieldTabBar {
     }
 
     /** 三色条扫过：切到这一屏时从左往右画出来。 */
-    private void paintTriBar(VDrawContext ctx, Ef.Palette p, int x, int y, int winW) {
+    private void paintTriBar(VDrawContext ctx, EfCanvas.Palette p, int x, int y, int winW) {
         int drawn = Math.round(winW * Ef.ease(Ef.progress(openStart, 600.0F)));
         int third = Math.max(1, winW / 3);
         int a = Math.min(third, drawn);

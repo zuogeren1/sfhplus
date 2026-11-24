@@ -1,6 +1,6 @@
 package me.zuogeren.slimefunhelperplus.module.custommodel.ui;
 
-import me.zuogeren.slimefunhelperplus.module.custommodel.ui.Ef;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 
 /**
  * 轮盘的版式与配色：一页 8 个槽位围成一圈，槽与槽之间留 2° 空隙，悬停那一格向外鼓出一圈。
@@ -45,31 +45,31 @@ public final class RouletteTheme {
     /** 普通格底：半透明深色，世界还在底下透出来。 */
     public static final int SLICE = 0x90141414;
     /** 悬停时擦在格底上的一层强调色；叠在格底上，所以任何背景下浓淡都一样。 */
-    public static int sliceHover(Ef.Palette p) {
+    public static int sliceHover(EfCanvas.Palette p) {
         return Ef.alpha(p.signal(), 0.5F);
     }
     /** 已选中格：整块强调色，再叠上悬停时提亮。 */
-    public static int sliceActive(Ef.Palette p) {
+    public static int sliceActive(EfCanvas.Palette p) {
         return p.signal();
     }
-    public static int sliceActiveHover(Ef.Palette p) {
+    public static int sliceActiveHover(EfCanvas.Palette p) {
         return Ef.mix(p.signal(), 0xFFFFFFFF, 0.35F);
     }
     /** 悬停格向外鼓出来的那一圈。 */
-    public static int sliceLip(Ef.Palette p) {
+    public static int sliceLip(EfCanvas.Palette p) {
         return Ef.alpha(p.signal(), 0.62F);
     }
 
     public static final int TEXT = 0xFFEDEDED;
     public static final int TEXT_DIM = 0xFFA3A3A3;
     /** 强调色底上的字用墨色，浅绿上白字看不清。 */
-    public static int textActive(Ef.Palette p) {
+    public static int textActive(EfCanvas.Palette p) {
         return p.onSignal();
     }
 
     /** 翻页箭头：底色 / 悬停底色 / 已经到头。 */
     public static final int ARROW_FILL = 0x90141414;
-    public static int arrowHover(Ef.Palette p) {
+    public static int arrowHover(EfCanvas.Palette p) {
         return p.signal();
     }
     public static final int ARROW_EDGE = 0xFFA3A3A3;
@@ -81,7 +81,7 @@ public final class RouletteTheme {
     public static final int PAGE_BG = 0xB0000000;
     public static final int PAGE_INK = 0xFFEDEDED;
 
-    public static int labelInk(Ef.Palette p, boolean active) {
+    public static int labelInk(EfCanvas.Palette p, boolean active) {
         return active ? textActive(p) : TEXT;
     }
 }

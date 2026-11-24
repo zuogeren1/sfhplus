@@ -1,4 +1,4 @@
-package me.zuogeren.slimefunhelperplus.module.custommodel.ui;
+package me.zuogeren.slimefunhelperplus.ui;
 
 import me.matl114.gui.basic.DrawableWidget;
 import me.matl114.versioned.api.VDrawContext;
@@ -9,7 +9,7 @@ import me.matl114.versioned.api.VDrawContext;
  * <p>宿主把 {@link DrawableWidget} 的矩阵先平移到元素原点再调 {@code renderInDefaultMatrix}，
  * 所以这里画的东西一律用局部坐标 (0,0)-(dx,dy)；悬停判定仍用 {@link #isOver(double, double)} 的屏幕坐标。
  *
- * <p>不继承宿主的 ElementHandler 体系，是因为新界面要的形状（切角、细线、等宽数字）宿主那套没有，
+ * <p>不继承宿主的 ElementHandler 体系，是因为自绘界面要的形状（切角、细线、等宽数字）宿主那套没有，
  * 硬接反而两边都不像。
  */
 public class EfWidget extends DrawableWidget {

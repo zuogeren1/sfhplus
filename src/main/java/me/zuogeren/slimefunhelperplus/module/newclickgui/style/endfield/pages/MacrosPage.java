@@ -10,6 +10,7 @@ import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 
 /**
  * 「宏」页：绑定命令与事件命令两个模块的配置合在一起，按各自的配置路径分节。
@@ -67,7 +68,7 @@ public class MacrosPage extends EndfieldModuleConfigScreen {
 
     /** 两段数据并排：名称、条数、启用状态。数字是真的条数，状态是真的开关值。 */
     @Override
-    protected void paintTool(VDrawContext ctx, Ef.Palette p, int x, int y, int width, int mouseX, int mouseY) {
+    protected void paintTool(VDrawContext ctx, EfCanvas.Palette p, int x, int y, int width, int mouseX, int mouseY) {
         int textY = y + 7;
         String bindName = "绑定命令";
         String eventName = "事件宏";
@@ -88,7 +89,7 @@ public class MacrosPage extends EndfieldModuleConfigScreen {
     }
 
     private static void paintBlock(
-            VDrawContext ctx, Ef.Palette p, int x, int textY, String name, int count, boolean enabled) {
+            VDrawContext ctx, EfCanvas.Palette p, int x, int textY, String name, int count, boolean enabled) {
         Ef.text(ctx, name, x, textY, p.ink());
 
         int numberX = x + Ef.textWidth(name) + 10;

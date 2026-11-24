@@ -2,10 +2,11 @@ package me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.pages;
 
 import java.util.List;
 import java.util.Locale;
-import me.matl114.accessors.gui.ScreenAccess;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.hacks.MainTasks;
 import me.matl114.hacks.api.BaseModule.WrapperConfigRef;
 import me.matl114.hacks.modules.task.TextFont;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.PageActions.Action;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
@@ -58,7 +59,7 @@ public class FontPage extends EndfieldModuleConfigScreen {
                 detail,
                 "选择",
                 "列出本机字体目录里的 ttf；选中的字体只在「系统字体」样式下生效。",
-                () -> ScreenAccess.of(new FontPickerPage(settings)).openFromCurrent()));
+                () -> HostScreens.open(new FontPickerPage(settings))));
     }
 
     /** 配置里可能是字体显示名，也可能是 ttf 的绝对路径；页脚只留辨识度最高的那一段。 */

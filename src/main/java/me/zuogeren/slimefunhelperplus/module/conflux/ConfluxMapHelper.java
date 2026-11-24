@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import me.matl114.accessors.gui.ScreenAccess;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.events.Event;
 import me.matl114.events.Listener;
 import me.matl114.gui.basic.DrawableWidget;
@@ -295,7 +295,7 @@ public class ConfluxMapHelper extends BaseModule {
             if (chatBox == null || chatBox.enableOther.get()) {
                 return;
             }
-            ScreenAccess.of(screen).addDrawableChildTo(chatBox.createDefaultInputWidget());
+            HostScreens.addChild(screen, chatBox.createDefaultInputWidget());
         } catch (Throwable e) {
             Debug.getLogger().warn("[ConfluxMapHelper] could not add the chat input to the conflux map screen", e);
         }

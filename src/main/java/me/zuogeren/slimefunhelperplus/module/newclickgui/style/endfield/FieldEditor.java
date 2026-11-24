@@ -1,14 +1,12 @@
 package me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield;
 
 import java.util.function.Consumer;
-import me.matl114.accessors.gui.ScreenAccess;
 import me.matl114.gui.GenericScreen;
-import me.matl114.managers.input.KeyCode;
 import me.matl114.versioned.api.VDrawContext;
-import net.minecraft.client.Minecraft;
+import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.network.chat.Component;
 
 /**
  * 一格里"点一下就开始改"的公共输入框。
@@ -25,9 +23,6 @@ public final class FieldEditor {
     public static final int FIELD_PAD = 4;
     public static final int FIELD_TOP = 1;
 
-    private static final int RING = 2;
-    private static final int RING_INSET = 1;
-
     private GenericScreen screen;
     private EditBox box;
     private String pendingKey;
@@ -37,6 +32,7 @@ public final class FieldEditor {
     private int pendingW;
     private String seed = "";
     private boolean live;
+    private int maxLength = 256;
     private Consumer<String> sink = text -> {};
 
     /**
@@ -47,13 +43,22 @@ public final class FieldEditor {
      * 绘制与命中都用这同一份矩形，点框内任何地方都不会把正在打的内容丢掉。
      */
     public void open(GenericScreen screen, String key, int x, int y, int w, String text, boolean live, Consumer<String> sink) {
+        open(screen, key, x, y, w, text, live, live ? 24 : 256, sink);
+    }
+
+    /** 支持指定最大长度的重载（例如长路径文本用 {@code 1024}）。 */
+    public void open(
+            GenericScreen screen, String key, int x, int y, int w,
+            String text, boolean live, int maxLength, Consumer<String> sink) {
         this.screen = screen;
         this.pendingKey = key;
+        this.boundKey = null;
         this.pendingX = x;
         this.pendingY = y;
         this.pendingW = Math.max(24, w);
         this.seed = text == null ? "" : text;
         this.live = live;
+        this.maxLength = Math.max(1, maxLength);
         this.sink = sink == null ? text0 -> {} : sink;
     }
 
@@ -124,8 +129,11 @@ public final class FieldEditor {
             destroy();
             return;
         }
-        if (box != null && pendingKey.equals(boundKey)) {
+        if (box != null && pendingKey.equals(boundKey) && screen != null && screen.children().contains(box)) {
             return;
+        }
+        if (box != null && pendingKey.equals(boundKey)) {
+            seed = box.getValue();
         }
         destroy();
         create();
@@ -135,30 +143,26 @@ public final class FieldEditor {
         if (screen == null) {
             return;
         }
-        EditBox created = new SubmitBox(
-                Minecraft.getInstance().font,
+        EditBox created = HostControls.submitEditBox(
                 pendingX + FIELD_PAD,
                 pendingY + FIELD_PAD,
                 Math.max(16, pendingW - FIELD_PAD * 2),
-                9,
-                Component.empty(),
+                maxLength,
                 this::close);
-        created.setBordered(false);
-        created.setMaxLength(live ? 24 : 256);
-        created.setValue(seed);
+        HostControls.setValueQuietly(
+                created,
+                seed,
+                live ? text -> {
+                    if (box == created) {
+                        sink.accept(text);
+                    }
+                } : null);
         // 输入框有长度上限：回填被截短时以它实际收下的为准，否则点掉时会写回截断值
         this.seed = created.getValue();
         this.box = created;
         this.boundKey = pendingKey;
-        ScreenAccess.of(this.screen).addDrawableChildTo(created);
+        HostScreens.addChild(this.screen, created);
         this.screen.setFocused(created);
-        if (live) {
-            created.setResponder(text -> {
-                if (box == created) {
-                    sink.accept(text);
-                }
-            });
-        }
     }
 
     private void destroy() {
@@ -173,7 +177,7 @@ public final class FieldEditor {
             if (screen.getFocused() == old) {
                 screen.setFocused(null);
             }
-            ScreenAccess.of(screen).removeChildFrom(old);
+            HostScreens.removeChild(screen, old);
         }
     }
 
@@ -184,39 +188,7 @@ public final class FieldEditor {
      * 环画在内侧，框的外沿尺寸不随聚焦变，相邻控件不会因为聚焦挪位。
      */
     public static void paintFrame(
-            VDrawContext ctx, Ef.Palette p, int x, int y, int w, int h, boolean focused, boolean hovered) {
-        Ef.fill(ctx, x, y, w, h, p.panel());
-        if (focused) {
-            Ef.fill(ctx, x + RING_INSET, y + RING_INSET, w - RING_INSET * 2, RING, p.trace());
-            Ef.fill(ctx, x + RING_INSET, y + h - RING_INSET - RING, w - RING_INSET * 2, RING, p.trace());
-            Ef.fill(ctx, x + RING_INSET, y + RING_INSET, RING, h - RING_INSET * 2, p.trace());
-            Ef.fill(ctx, x + w - RING_INSET - RING, y + RING_INSET, RING, h - RING_INSET * 2, p.trace());
-            return;
-        }
-        int edge = hovered ? p.ink2() : p.rule();
-        Ef.fill(ctx, x, y, w, 1, edge);
-        Ef.fill(ctx, x, y + h - 1, w, 1, edge);
-        Ef.fill(ctx, x, y, 1, h, edge);
-        Ef.fill(ctx, x + w - 1, y, 1, h, edge);
-    }
-
-    /** 原版输入框不接 Enter，而按键只派给拿到焦点的那一个控件，所以提交只能在这一层拦下来。 */
-    private static final class SubmitBox extends EditBox {
-        private final Runnable submit;
-
-        SubmitBox(net.minecraft.client.gui.Font font, int x, int y, int width, int height, Component message, Runnable submit) {
-            super(font, x, y, width, height, message);
-            this.submit = submit;
-        }
-
-        @Override
-        public boolean keyPressed(KeyEvent event) {
-            int key = event.key();
-            if (key == KeyCode.KEY_ENTER || key == KeyCode.KEY_KP_ENTER) {
-                this.submit.run();
-                return true;
-            }
-            return super.keyPressed(event);
-        }
+            VDrawContext ctx, EfCanvas.Palette p, int x, int y, int w, int h, boolean focused, boolean hovered) {
+        EndfieldWidgets.paintFieldFrame(ctx, p, x, y, w, h, focused, hovered);
     }
 }

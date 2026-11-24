@@ -2,7 +2,7 @@ package me.zuogeren.slimefunhelperplus.module.custommodel.ui;
 
 import java.util.List;
 import java.util.Locale;
-import me.matl114.accessors.gui.ScreenAccess;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.gui.GenericScreen;
 import me.matl114.utils.ClientUtils;
 import me.matl114.versioned.api.VDrawContext;
@@ -10,7 +10,8 @@ import me.zuogeren.slimefunhelperplus.module.custommodel.CustomModelManager;
 import me.zuogeren.slimefunhelperplus.module.custommodel.ModelCatalog;
 import me.zuogeren.slimefunhelperplus.module.custommodel.model.ModelRuntime;
 import me.zuogeren.slimefunhelperplus.module.custommodel.ui.Ef;
-import me.zuogeren.slimefunhelperplus.module.custommodel.ui.EfWidget;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
+import me.zuogeren.slimefunhelperplus.ui.EfWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -19,11 +20,11 @@ import net.minecraft.network.chat.Component;
 /**
  * 动作预览页：左边一块大预览，右边一列动作，点动作即切换。
  *
- * <p>版式照用户确认过的可交互预览（{@code .notes/refs/image/ysm/preview.html}）：面板 420×235、
+ * <p>版式与可交互预览原型一致：面板 420×235、
  * 左栏 262、右栏 155、动作 8 条一页、返回按钮 145×22。
  *
  * <p>从模型选择页的齿轮进来，返回（按钮或 Esc）回到模型选择页 —— 父屏由
- * {@link ScreenAccess#openFromCurrent()} 记下，所以这里只管调 {@code onClose()}。
+ * {@link HostScreens#open(net.minecraft.client.gui.screens.Screen)} 记下，所以这里只管调 {@code onClose()}。
  *
  * <p>动作列表直接取 {@link ModelRuntime#extras()}：服装预设与额外动作都在里面。动作点一下从头播一次、
  * 播完停在末帧（{@link ModelRuntime#playExtraOnce(String)}）；服装预设是静态覆盖层，点一下切换。
@@ -87,7 +88,7 @@ public class ActionPreviewScreen extends GenericScreen {
     };
     private static final int HOVER_ROW = 10;
 
-    private final Ef.Palette pal = Ef.DARK;
+    private final EfCanvas.Palette pal = Ef.DARK;
 
     private int panelX;
     private int panelY;
@@ -110,7 +111,7 @@ public class ActionPreviewScreen extends GenericScreen {
         if (ClientUtils.getScreen() instanceof ActionPreviewScreen) {
             return;
         }
-        ScreenAccess.of(new ActionPreviewScreen()).openFromCurrent();
+        HostScreens.open(new ActionPreviewScreen());
     }
 
     @Override
@@ -196,9 +197,9 @@ public class ActionPreviewScreen extends GenericScreen {
         updateHover(mouseX, mouseY);
         int px = panelX;
         int py = panelY;
-        Ef.cutFill(ctx, px, py, PANEL_W, PANEL_H, pal.paper(), pal.cutPanel(), Ef.Corner.BR);
+        Ef.cutFill(ctx, px, py, PANEL_W, PANEL_H, pal.paper(), pal.cutPanel(), EfCanvas.Corner.BR);
         Ef.fill(ctx, px, py, LEFT_W, PANEL_H, pal.panel());
-        Ef.cutFill(ctx, px + RIGHT_X, py, RIGHT_W, PANEL_H, pal.panel(), pal.cutPanel(), Ef.Corner.BR);
+        Ef.cutFill(ctx, px + RIGHT_X, py, RIGHT_W, PANEL_H, pal.panel(), pal.cutPanel(), EfCanvas.Corner.BR);
         paintStage(ctx, px, py);
         paintNav(ctx, px, py);
         paintTabs(ctx, px, py);
@@ -267,7 +268,7 @@ public class ActionPreviewScreen extends GenericScreen {
         boolean hot = hovered == HOVER_BACK;
         float wipe = hot ? Ef.mech(Ef.progress(hoverStart, WIPE_MS)) : 0.0F;
         Ef.wipeCut(ctx, px + BACK_X, py + BACK_Y, BACK_W, BACK_H, pal.chip(), pal.signal(), wipe,
-                pal.cutWide(), Ef.Corner.BR);
+                pal.cutWide(), EfCanvas.Corner.BR);
         String label = "< 返回";
         Ef.text(ctx, label, px + BACK_X + (BACK_W - Ef.textWidth(label)) / 2,
                 py + BACK_Y + (BACK_H - Ef.lineH()) / 2, hot ? pal.onSignal() : pal.ink());
@@ -276,9 +277,9 @@ public class ActionPreviewScreen extends GenericScreen {
     private void paintNavButton(VDrawContext ctx, int x, int y, String glyph, boolean enabled, boolean hot) {
         float wipe = hot && enabled ? Ef.mech(Ef.progress(hoverStart, WIPE_MS)) : 0.0F;
         if (enabled && hot) {
-            Ef.wipeCut(ctx, x, y, NAV_SIZE, NAV_SIZE, pal.chip(), pal.signal(), wipe, pal.cut(), Ef.Corner.BR);
+            Ef.wipeCut(ctx, x, y, NAV_SIZE, NAV_SIZE, pal.chip(), pal.signal(), wipe, pal.cut(), EfCanvas.Corner.BR);
         } else {
-            Ef.cutFill(ctx, x, y, NAV_SIZE, NAV_SIZE, pal.chip(), pal.cut(), Ef.Corner.BR);
+            Ef.cutFill(ctx, x, y, NAV_SIZE, NAV_SIZE, pal.chip(), pal.cut(), EfCanvas.Corner.BR);
         }
         int ink = !enabled ? 0xFF5C5C5C : (hot ? pal.onSignal() : pal.ink());
         Ef.text(ctx, glyph, x + (NAV_SIZE - Ef.textWidth(glyph)) / 2,
@@ -306,11 +307,11 @@ public class ActionPreviewScreen extends GenericScreen {
             boolean active = category == cats[i];
             boolean hot = hovered == HOVER_TAB + i;
             if (active) {
-                Ef.cutFill(ctx, tx, ty, TAB_W, TAB_H, pal.signal(), 2, Ef.Corner.BR);
+                Ef.cutFill(ctx, tx, ty, TAB_W, TAB_H, pal.signal(), 2, EfCanvas.Corner.BR);
             } else if (hot) {
-                Ef.cutFill(ctx, tx, ty, TAB_W, TAB_H, pal.chip(), 2, Ef.Corner.BR);
+                Ef.cutFill(ctx, tx, ty, TAB_W, TAB_H, pal.chip(), 2, EfCanvas.Corner.BR);
             } else {
-                Ef.cutFill(ctx, tx, ty, TAB_W, TAB_H, pal.panel(), 2, Ef.Corner.BR);
+                Ef.cutFill(ctx, tx, ty, TAB_W, TAB_H, pal.panel(), 2, EfCanvas.Corner.BR);
             }
             int ink = active ? pal.onSignal() : (hot ? pal.ink() : pal.ink2());
             Ef.text(ctx, labels[i], tx + (TAB_W - Ef.textWidth(labels[i])) / 2,
@@ -339,12 +340,12 @@ public class ActionPreviewScreen extends GenericScreen {
             boolean hot = hovered == HOVER_ROW + i;
             float wipe = hot ? Ef.mech(Ef.progress(hoverStart, WIPE_MS)) : 0.0F;
             if (active) {
-                Ef.cutFill(ctx, rx, ry, LIST_W, ROW_H, pal.signal(), pal.cut(), Ef.Corner.BR);
+                Ef.cutFill(ctx, rx, ry, LIST_W, ROW_H, pal.signal(), pal.cut(), EfCanvas.Corner.BR);
             } else if (hot) {
                 Ef.wipeCut(ctx, rx, ry, LIST_W, ROW_H, pal.chip(), Ef.alpha(pal.signal(), 0.18F), wipe,
-                        pal.cut(), Ef.Corner.BR);
+                        pal.cut(), EfCanvas.Corner.BR);
             } else {
-                Ef.cutFill(ctx, rx, ry, LIST_W, ROW_H, pal.chip(), pal.cut(), Ef.Corner.BR);
+                Ef.cutFill(ctx, rx, ry, LIST_W, ROW_H, pal.chip(), pal.cut(), EfCanvas.Corner.BR);
             }
             int ink = active ? pal.onSignal() : (hot ? pal.ink() : pal.ink2());
             String no = String.format(Locale.ROOT, "%02d", index + 1);

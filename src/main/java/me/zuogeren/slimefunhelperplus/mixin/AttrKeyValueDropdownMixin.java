@@ -6,7 +6,7 @@ import me.matl114.gui.interfaces.ElementFactory;
 import me.matl114.utils.config.AttrKeyValue;
 import me.matl114.utils.config.KeyValue;
 import me.zuogeren.slimefunhelperplus.hostgui.AttrKeyValueDropdownWidget;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldModuleConfigScreen;
+import me.zuogeren.slimefunhelperplus.hostgui.StringChoicesRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -32,7 +32,7 @@ public interface AttrKeyValueDropdownMixin {
             CallbackInfoReturnable<DrawableWidget> callbackInfo) {
         // 不能用 @Shadow：getKeyName() 声明在父接口 KeyValue 上，shadow 只在目标接口自身的方法表里找
         String key = ((KeyValue<?>) this).getKeyName();
-        List<String> choices = EndfieldModuleConfigScreen.stringChoicesOfPath(key);
+        List<String> choices = StringChoicesRegistry.ofPath(key);
         if (choices.isEmpty()) {
             return;
         }

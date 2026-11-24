@@ -7,27 +7,36 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import me.matl114.accessors.gui.ScreenAccess;
+import java.util.stream.Collectors;
 import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
+import me.zuogeren.slimefunhelperplus.hostgui.HostEditors;
 import me.matl114.gui.GenericScreen;
-import me.matl114.gui.presets.choices.RegistrySelectScreen;
 import me.matl114.hacks.utils.config.EntrySet;
+import me.matl114.hacks.utils.config.Holder;
+import me.matl114.hacks.utils.config.NBTTypes;
+import me.matl114.hacks.utils.config.PrimitiveList;
+import me.matl114.hacks.utils.config.PrimitiveMap;
 import me.matl114.hacks.utils.config.WrapColor;
 import me.matl114.hooks.BaritoneHooks;
 import me.matl114.utils.ChatUtils;
 import me.matl114.utils.config.ValueAccessor;
 import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.BoundsResolver;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.RecordFieldOps;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.ValueCodec;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyle;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EfWidget;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldClickGuiScreen;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldColorPalette;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldTabBar;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldWidgets;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.FieldEditor;
-import net.minecraft.client.gui.screens.Screen;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
+import me.zuogeren.slimefunhelperplus.ui.EfWidget;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.Block;
 
 /**
  * 「Baritone」页：{@link BaritoneHooks} 暴露的整张设置表。
@@ -78,7 +87,7 @@ public class BaritonePage extends GenericScreen {
     private final List<Row> rows = new ArrayList<>();
 
     /** 每项滑杆的取值区间：只在当前值跑出区间时重取。 */
-    private final Map<String, double[]> ranges = new HashMap<>();
+    private final BoundsResolver ranges = new BoundsResolver();
 
     /** 出厂值：Baritone 的 Setting 自带 defaultValue，拿不到的那些就不给重置入口。 */
     private final Map<String, Object> defaults = new HashMap<>();
@@ -94,6 +103,9 @@ public class BaritonePage extends GenericScreen {
 
     /** 数值槽就地手输：开着的这一行让出自己的文本，交给原版输入框画。 */
     private final FieldEditor editor = new FieldEditor();
+
+    /** 颜色项共用调色盘浮层。 */
+    private final EndfieldColorPalette palettePanel = new EndfieldColorPalette();
 
     private Entry hovered;
 
@@ -125,6 +137,9 @@ public class BaritonePage extends GenericScreen {
         for (Entry entry : this.entries) {
             try {
                 Object value = BaritoneHooks.getInstance().getDefaultValue(entry.name());
+                if (value instanceof Map<?, ?> rawMap && valueOf(entry) instanceof PrimitiveMap<?, ?>) {
+                    value = wrapBlockMapDefault(rawMap);
+                }
                 if (value != null) {
                     defaults.put(entry.name(), value);
                 }
@@ -132,6 +147,28 @@ public class BaritonePage extends GenericScreen {
                 // 这一项没有出厂值：跳过，不影响其它行
             }
         }
+    }
+
+    @SuppressWarnings({"unchecked"})
+    private static PrimitiveMap<Holder<Block>, PrimitiveList<Holder<Block>>> wrapBlockMapDefault(Map<?, ?> rawMap) {
+        Map<Holder<Block>, PrimitiveList<Holder<Block>>> converted = rawMap.entrySet().stream()
+                .filter(e -> e.getKey() instanceof Block && e.getValue() instanceof List<?>)
+                .collect(Collectors.toMap(
+                        e -> Holder.of(BuiltInRegistries.BLOCK, (Block) e.getKey()),
+                        e -> new PrimitiveList<>(
+                                NBTTypes.HOLDER_TYPE.cast(),
+                                ((List<?>) e.getValue()).stream()
+                                        .filter(Block.class::isInstance)
+                                        .map(b -> Holder.of(BuiltInRegistries.BLOCK, (Block) b))
+                                        .toList(),
+                                Holder.of(BuiltInRegistries.BLOCK, null)),
+                        (a, b) -> b));
+        return new PrimitiveMap<>(
+                NBTTypes.HOLDER_TYPE.cast(),
+                NBTTypes.PRIMITIVE_LIST_TYPE.cast(),
+                converted,
+                Holder.of(BuiltInRegistries.BLOCK, null),
+                new PrimitiveList<>(NBTTypes.HOLDER_TYPE.cast(), List.of(), Holder.of(BuiltInRegistries.BLOCK, null)));
     }
 
     // ------------------------------------------------------------------ 数据
@@ -182,58 +219,16 @@ public class BaritonePage extends GenericScreen {
     }
 
     private static boolean integral(Object value) {
-        return value instanceof Integer
-                || value instanceof Long
-                || value instanceof Short
-                || value instanceof Byte;
+        return RecordFieldOps.isIntegral(value);
     }
 
-    /**
-     * 滑杆的取值区间：Baritone 的设置不带上界信息，按当前值的数量级取一段，
-     * 只有当前值跑出这段区间时才按新的数量级重取——每帧重推会让轨道随拖动跳档。
-     */
+    /** 滑杆的取值区间：只在当前值跑出区间时按新数量级重算，拖动过程中不会跳档。 */
     private double[] range(Entry entry, double current, boolean whole) {
-        double[] cached = ranges.get(entry.name());
-        if (cached == null || current < cached[0] || current > cached[1]) {
-            cached = deriveRange(current, whole);
-            ranges.put(entry.name(), cached);
-        }
-        return cached;
+        return ranges.resolveUnbounded(entry.name(), current, whole);
     }
 
-    private static double[] deriveRange(double current, boolean whole) {
-        double abs = Math.abs(current);
-        double top;
-        if (abs < 1.0D) {
-            // 0 和纯小数：整数型给一段能拉到 100 的区间，浮点型按 0~1 的比例给
-            top = whole ? 100.0D : 1.0D;
-        } else {
-            top = Math.pow(10.0D, Math.ceil(Math.log10(abs)));
-        }
-        return current < 0.0D ? new double[] {-top, top} : new double[] {0.0D, top};
-    }
-
-    /** 把滑杆算出的 double 还原成原来的数值类型；认不出的类型不写。 */
     private static Object coerce(Object current, double next) {
-        if (current instanceof Integer) {
-            return (int) Math.round(next);
-        }
-        if (current instanceof Long) {
-            return Math.round(next);
-        }
-        if (current instanceof Short) {
-            return (short) Math.round(next);
-        }
-        if (current instanceof Byte) {
-            return (byte) Math.round(next);
-        }
-        if (current instanceof Float) {
-            return (float) next;
-        }
-        if (current instanceof Double) {
-            return next;
-        }
-        return null;
+        return RecordFieldOps.coerceValue(current, next);
     }
 
     private static String label(Entry entry) {
@@ -277,10 +272,7 @@ public class BaritonePage extends GenericScreen {
     }
 
     private static String formatNumber(double value) {
-        if (Math.abs(value - Math.rint(value)) < 1.0E-6D) {
-            return String.format(Locale.ROOT, "%.0f", value);
-        }
-        return String.format(Locale.ROOT, "%.2f", value).replaceAll("0+$", "").replaceAll("\\.$", "");
+        return ValueCodec.formatNumber(value);
     }
 
     // ------------------------------------------------------------------ 骨架
@@ -289,7 +281,7 @@ public class BaritonePage extends GenericScreen {
         return settings != null && settings.light();
     }
 
-    private Ef.Palette pal() {
+    private EfCanvas.Palette pal() {
         return Ef.palette(light()).withAlpha(NewClickGui.opacity());
     }
 
@@ -306,6 +298,7 @@ public class BaritonePage extends GenericScreen {
         this.scroll = 0;
         // 重建控件会把屏幕上的输入框全清掉，手里那一格跟着作废
         editor.close();
+        palettePanel.close();
     }
 
     @Override
@@ -402,24 +395,25 @@ public class BaritonePage extends GenericScreen {
     // ------------------------------------------------------------------ 绘制
 
     private void paint(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         buildRows();
         hovered = null;
 
-        paintBar(ctx, mouseX, mouseY);
+        paintBar(ctx, p, mouseX, mouseY);
         paintBody(ctx, p, mouseX, mouseY);
         paintDropdown(ctx, p, mouseX, mouseY);
         paintFooter(ctx, p);
         paintFrame(ctx, p);
+        paintPalette(ctx, p, mouseX, mouseY);
         paintTooltip(ctx, p, mouseX, mouseY);
     }
 
-    private void paintBar(VDrawContext ctx, int mouseX, int mouseY) {
+    private void paintBar(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         // 命令栏就是整条分类条；Baritone 可不可用由正文那一句说明，不再占命令栏
-        tabBar.paint(ctx, winX, winY, winW, "Baritone", light(), mouseX, mouseY);
+        tabBar.paint(ctx, p, winX, winY, winW, "Baritone", light(), mouseX, mouseY);
     }
 
-    private void paintBody(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintBody(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         int top = bodyTop();
         int height = bodyHeight();
         Ef.fill(ctx, winX, top, winW, height, p.paper());
@@ -447,7 +441,7 @@ public class BaritonePage extends GenericScreen {
     }
 
     /** 空页与不可用都只写一句完整的话。 */
-    private void paintNote(VDrawContext ctx, Ef.Palette p, String text) {
+    private void paintNote(VDrawContext ctx, EfCanvas.Palette p, String text) {
         int y = bodyTop() + 8;
         for (String line : Ef.wrap(text, contentWidth)) {
             Ef.text(ctx, line, contentLeft, y, p.ink2());
@@ -455,7 +449,7 @@ public class BaritonePage extends GenericScreen {
         }
     }
 
-    private void paintRow(VDrawContext ctx, Ef.Palette p, Row row, int mouseX, int mouseY) {
+    private void paintRow(VDrawContext ctx, EfCanvas.Palette p, Row row, int mouseX, int mouseY) {
         int y = row.y();
         boolean hover = mouseY >= y && mouseY < y + ROW_H && mouseX >= contentLeft - 4 && mouseX <= contentRight() + 4;
         if (hover && dropdown == null) {
@@ -484,9 +478,11 @@ public class BaritonePage extends GenericScreen {
         } else if (value instanceof Enum<?> option) {
             paintEnum(ctx, p, y, dropdown == row.entry(), option.name());
         } else if (value instanceof WrapColor color) {
-            paintColor(ctx, p, y, color);
+            paintColor(ctx, p, row.entry(), y, color);
         } else if (value instanceof EntrySet<?> set) {
             paintEntrySet(ctx, p, y, set);
+        } else if (value instanceof PrimitiveMap<?, ?> map) {
+            paintPrimitiveMap(ctx, p, y, map);
         } else if (value instanceof CharSequence text) {
             paintText(ctx, p, row, text.toString(), mouseX, mouseY);
         } else {
@@ -495,52 +491,40 @@ public class BaritonePage extends GenericScreen {
         }
     }
 
-    /** 颜色：切角块里一块色块加它的十六进制值，点开就地手输。 */
-    private void paintColor(VDrawContext ctx, Ef.Palette p, int y, WrapColor color) {
-        int rgb = color == null || color.color() == null ? 0xFFFFFF : color.asRGB();
-        String hex = String.format(Locale.ROOT, "#%06X", rgb & 0xFFFFFF);
-        int hexW = Ef.textWidth("#RRGGBB") + 2;
-        int width = 2 + 12 + 5 + hexW + 3;
-        int x = controlRight() - width;
-        Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), p.cut());
-        Ef.fill(ctx, x + 2, y + 3, 12, 12, 0xFF000000 | (rgb & 0xFFFFFF));
-        Ef.text(ctx, hex, x + 2 + 12 + 5, y + 5, p.ink());
+    /** 颜色：切角块里一块色块加它的十六进制值，色块开调色盘、十六进制开输入框。 */
+    private void paintColor(VDrawContext ctx, EfCanvas.Palette p, Entry entry, int y, WrapColor color) {
+        EndfieldWidgets.paintColorRow(
+                ctx, p, controlRight(), y, ValueCodec.colorOf(color), editor.isOpenFor(colorKey(entry)), p.cut());
     }
 
     /** 名单：一个「N 项 ▾」切角块，点开宿主的注册表选择屏。 */
-    private void paintEntrySet(VDrawContext ctx, Ef.Palette p, int y, EntrySet<?> set) {
-        String label = set.set().size() + " 项   ▾";
-        int width = Ef.textWidth(label) + 10;
-        int x = controlRight() - width;
-        Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), p.cut());
-        Ef.text(ctx, label, x + 5, y + 5, p.ink());
+    private void paintEntrySet(VDrawContext ctx, EfCanvas.Palette p, int y, EntrySet<?> set) {
+        EndfieldWidgets.paintCountChip(ctx, p, y, controlRight(), set.set().size() + " 项", p.cut(), false);
+    }
+
+    /** 映射：一个「N 项 ▾」切角块，点开宿主的方块替换表编辑器。 */
+    private void paintPrimitiveMap(VDrawContext ctx, EfCanvas.Palette p, int y, PrimitiveMap<?, ?> map) {
+        EndfieldWidgets.paintCountChip(ctx, p, y, controlRight(), map.toPrimitiveMap().size() + " 项", p.cut(), false);
     }
 
     /** 字符串：与数值槽同一套就地编辑，静态态画一条虚线底边说明这一格能点。 */
-    private void paintText(VDrawContext ctx, Ef.Palette p, Row row, String text, int mouseX, int mouseY) {
+    private void paintText(VDrawContext ctx, EfCanvas.Palette p, Row row, String text, int mouseX, int mouseY) {
         int fx = fieldX();
         int fy = row.y() + FieldEditor.FIELD_TOP;
-        if (editor.isOpenFor(fieldKey(row.entry()))) {
-            FieldEditor.paintFrame(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, true, false);
+        boolean editing = editor.isOpenFor(fieldKey(row.entry()));
+        boolean over = !editing && mouseX >= fx && mouseX < fx + TEXT_W
+                && mouseY >= fy && mouseY < fy + FieldEditor.FIELD_H;
+        EndfieldWidgets.paintValueSlot(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, editing, over);
+        if (editing) {
             editor.setTextColor(p.ink());
             return;
-        }
-        boolean over = mouseX >= fx && mouseX < fx + TEXT_W
-                && mouseY >= fy && mouseY < fy + FieldEditor.FIELD_H;
-        if (over) {
-            FieldEditor.paintFrame(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, false, true);
-        } else {
-            int lineY = fy + FieldEditor.FIELD_H - 2;
-            for (int i = 0; i < TEXT_W; i += 3) {
-                Ef.fill(ctx, fx + i, lineY, Math.min(2, TEXT_W - i), 1, p.rule());
-            }
         }
         String shown = Ef.ellipsis(text, TEXT_W - 8);
         Ef.text(ctx, shown, fx + TEXT_W - 6 - Ef.textWidth(shown), row.y() + 5, p.ink());
     }
 
     /** 行尾重置：只有拿得到出厂值的项才画，点它写回 {@code defaultValue}。 */
-    private void paintReset(VDrawContext ctx, Ef.Palette p, Row row, int mouseX, int mouseY) {
+    private void paintReset(VDrawContext ctx, EfCanvas.Palette p, Row row, int mouseX, int mouseY) {
         Object def = defaults.get(row.entry().name());
         if (def == null) {
             return;
@@ -560,54 +544,38 @@ public class BaritonePage extends GenericScreen {
     }
 
     /** 开关块：实心墨块 = 开，虚线框 = 关，点一下切一次。 */
-    private void paintSwitch(VDrawContext ctx, Ef.Palette p, int y, boolean on) {
-        int right = controlRight();
-        int width = 20;
-        int height = 9;
-        int top = y + (ROW_H - height) / 2;
-        if (on) {
-            Ef.fill(ctx, right - width, top, width, height, p.ink());
-            Ef.fill(ctx, right - 9, top + 2, 5, 5, p.paper());
-        } else {
-            Ef.dashedOutline(ctx, right - width, top, width, height, p.ink2());
-            Ef.fill(ctx, right - width + 2, top + 2, 5, 5, p.ink2());
-        }
+    private void paintSwitch(VDrawContext ctx, EfCanvas.Palette p, int y, boolean on) {
+        EndfieldWidgets.paintSwitch(ctx, p, y, ROW_H, controlRight(), on);
     }
 
     /** 数值滑杆：细线轨道 + 2px 手柄 + 右端数值槽。 */
     private void paintSlider(
-            VDrawContext ctx, Ef.Palette p, Row row, int mouseX, int mouseY, String text,
+            VDrawContext ctx, EfCanvas.Palette p, Row row, int mouseX, int mouseY, String text,
             double value, double min, double max) {
         int y = row.y();
         int right = controlRight();
         int width = sliderWidth();
         int left = right - TEXT_W - 8 - width;
-        int lineY = y + ROW_H / 2;
-
-        Ef.fill(ctx, left, lineY, width, 1, p.rule());
-        double ratio = max > min ? (value - min) / (max - min) : 0.0D;
-        int knob = (int) (width * Math.max(0.0D, Math.min(1.0D, ratio)));
-        Ef.fill(ctx, left, lineY, knob, 1, p.ink());
-        Ef.fill(ctx, left + knob - 1, lineY - 3, 2, 7, p.ink());
+        EndfieldWidgets.paintSliderTrack(ctx, p, left, y + ROW_H / 2, width, value, min, max);
 
         int fx = fieldX();
         int fy = y + FieldEditor.FIELD_TOP;
         if (editor.isOpenFor(fieldKey(row.entry()))) {
             // 输入框自己画字，这里只把框让出来
-            FieldEditor.paintFrame(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, true, false);
+            EndfieldWidgets.paintFieldFrame(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, true, false);
             editor.setTextColor(p.ink());
             return;
         }
         boolean over = mouseX >= fx && mouseX < fx + TEXT_W
                 && mouseY >= fy && mouseY < fy + FieldEditor.FIELD_H;
         if (over) {
-            FieldEditor.paintFrame(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, false, true);
+            EndfieldWidgets.paintFieldFrame(ctx, p, fx, fy, TEXT_W, FieldEditor.FIELD_H, false, true);
         }
         Ef.text(ctx, text, right - Ef.textWidth(text), y + 5, p.ink());
     }
 
     /** 枚举是一个切角小块，打开时用墨底反白。 */
-    private void paintEnum(VDrawContext ctx, Ef.Palette p, int y, boolean opened, String text) {
+    private void paintEnum(VDrawContext ctx, EfCanvas.Palette p, int y, boolean opened, String text) {
         String chip = Ef.ellipsis(text, Math.max(60, contentWidth / 3)) + "   ▾";
         int width = Ef.textWidth(chip);
         int left = controlRight() - width - 10;
@@ -624,7 +592,7 @@ public class BaritonePage extends GenericScreen {
         return top;
     }
 
-    private void paintDropdown(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintDropdown(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         if (dropdown == null) {
             return;
         }
@@ -663,22 +631,18 @@ public class BaritonePage extends GenericScreen {
         return option instanceof Enum<?> value ? value.name() : String.valueOf(option);
     }
 
-    private void paintFooter(VDrawContext ctx, Ef.Palette p) {
-        int y = winY + winH - FOOT_H;
-        Ef.fill(ctx, winX, y, winW, FOOT_H, p.panel());
-        Ef.rule(ctx, winX, y, winW, p.rule());
-
+    private void paintFooter(VDrawContext ctx, EfCanvas.Palette p) {
         String left = available ? entries.size() + " 项设置  │  已开启 " + enabledCount() + " 项" : "Baritone 不可用";
-        Ef.text(ctx, left, winX + 8, y + 3, p.ink2());
+        String hint = null;
         if (available) {
-            String hint = "点开关切换 │ 拖滑杆改数值 │ 点数字手输 │ 右键重置";
+            hint = "点开关切换 │ 拖滑杆改数值 │ 点数字手输 │ 右键重置";
             int room = winW - 16 - Ef.textWidth(left);
             if (Ef.textWidth(hint) > room) {
                 // 窄窗先省掉"点开关切换"：右侧提示压到左侧统计上比少一句提示更糟
                 hint = "拖滑杆 │ 数字手输 │ 右键重置";
             }
-            Ef.text(ctx, hint, winX + winW - 8 - Ef.textWidth(hint), y + 3, p.ink2());
         }
+        EndfieldWidgets.paintFooterBar(ctx, p, winX, winY, winW, winH, FOOT_H, left, hint);
     }
 
     /** 页脚统计：真的去读，不按「应该开着」估算。 */
@@ -692,15 +656,21 @@ public class BaritonePage extends GenericScreen {
         return count;
     }
 
-    private void paintFrame(VDrawContext ctx, Ef.Palette p) {
-        int edge = p.ink();
-        Ef.fill(ctx, winX, winY, winW, 1, edge);
-        Ef.fill(ctx, winX, winY + winH - 1, winW, 1, edge);
-        Ef.fill(ctx, winX, winY, 1, winH, edge);
-        Ef.fill(ctx, winX + winW - 1, winY, 1, winH, edge);
+    private void paintFrame(VDrawContext ctx, EfCanvas.Palette p) {
+        EndfieldWidgets.paintWindowFrame(ctx, p, winX, winY, winW, winH);
     }
 
-    private void paintTooltip(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintPalette(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
+        if (!(palettePanel.target() instanceof Entry target)) {
+            return;
+        }
+        if (palettePanel.paint(ctx, p, winX, winY, winW, winH, ROW_H,
+                ValueCodec.colorOf(valueOf(target)), mouseX, mouseY)) {
+            hovered = null;
+        }
+    }
+
+    private void paintTooltip(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         if (hovered == null) {
             return;
         }
@@ -740,6 +710,17 @@ public class BaritonePage extends GenericScreen {
             return true;
         }
 
+        if (palettePanel.target() instanceof Entry target) {
+            if (palettePanel.click(winX, winY, winW, winH, ROW_H, ValueCodec.colorOf(valueOf(target)),
+                    mx, my, button, rgb -> write(target, ValueCodec.withRgb(valueOf(target), rgb)))) {
+                return true;
+            }
+            palettePanel.close();
+            if (my < winY || my >= winY + barH) {
+                return true;
+            }
+        }
+
         if (my >= winY && my < winY + barH) {
             String hit = tabBar.click(winX, winY, winW, "Baritone", light(), mx, my);
             if (EndfieldTabBar.THEME.equals(hit)) {
@@ -749,11 +730,7 @@ public class BaritonePage extends GenericScreen {
                 return true;
             }
             if (hit != null && !"Baritone".equals(hit)) {
-                GuiStyle style = GuiStyles.getOrDefault(NewClickGui.style());
-                Screen next = "Module".equals(hit) ? style.openMain(settings) : style.openPage(hit, settings);
-                if (next != null) {
-                    ScreenAccess.of(this).switchToScreen(next);
-                }
+                GuiStyles.switchTab(this, hit, settings);
                 return true;
             }
             return false;
@@ -826,12 +803,7 @@ public class BaritonePage extends GenericScreen {
             return false;
         }
         if (value instanceof WrapColor color) {
-            int fx = fieldX();
-            if (button == 0 && mouseX >= fx && mouseX <= fx + TEXT_W) {
-                openColorField(row, entry, color);
-                return true;
-            }
-            return false;
+            return hitColor(row, entry, color, mouseX, mouseY, button);
         }
         if (value instanceof EntrySet<?> set) {
             String label = set.set().size() + " 项   ▾";
@@ -839,6 +811,16 @@ public class BaritonePage extends GenericScreen {
             if (button == 0 && mouseX >= controlRight() - width && mouseX <= controlRight()
                     && mouseY >= row.y() + 3 && mouseY < row.y() + 15) {
                 openEntrySet(entry, set);
+                return true;
+            }
+            return false;
+        }
+        if (value instanceof PrimitiveMap<?, ?> map) {
+            String label = map.toPrimitiveMap().size() + " 项   ▾";
+            int width = Ef.textWidth(label) + 10;
+            if (button == 0 && mouseX >= controlRight() - width && mouseX <= controlRight()
+                    && mouseY >= row.y() + 3 && mouseY < row.y() + 15) {
+                openPrimitiveMap(entry);
                 return true;
             }
             return false;
@@ -866,62 +848,42 @@ public class BaritonePage extends GenericScreen {
     }
 
     /**
-     * 颜色就地编辑：只认 {@code #RRGGBB} 与命名色。
-     *
-     * <p>十六进制按定长六位挡：{@code #} 开头的串只当十六进制解释，打到一半的半截值不能改掉设置。
+     * 颜色命中：色块开调色盘，十六进制槽按 {@link EndfieldWidgets#colorGeometry} 开就地输入。
      */
-    private void openColorField(Row row, Entry entry, WrapColor current) {
-        int rgb = current == null || current.color() == null ? 0xFFFFFF : current.asRGB();
-        String seed = String.format(Locale.ROOT, "#%06X", rgb & 0xFFFFFF);
-        editor.open(this, colorKey(entry), fieldX(), row.y() + FieldEditor.FIELD_TOP, TEXT_W, seed, false,
-                text -> {
-                    String value = text.trim().toLowerCase(Locale.ROOT);
-                    if (value.startsWith("#") && !fullHex(value)) {
-                        return;
-                    }
-                    try {
-                        write(entry, new WrapColor(value));
-                    } catch (RuntimeException ignored) {
-                        // 名字拼错或者打到一半：等打完
-                    }
-                });
-    }
-
-    /** 整串是否就是 {@code #} 加六位十六进制。 */
-    private static boolean fullHex(String value) {
-        if (value.length() != 7) {
+    private boolean hitColor(Row row, Entry entry, WrapColor current, int mouseX, int mouseY, int button) {
+        if (button != 0 || mouseY < row.y() + FieldEditor.FIELD_TOP
+                || mouseY >= row.y() + FieldEditor.FIELD_TOP + FieldEditor.FIELD_H) {
             return false;
         }
-        for (int i = 1; i < value.length(); i++) {
-            if (Character.digit(value.charAt(i), 16) < 0) {
-                return false;
-            }
+        EndfieldWidgets.ColorGeometry box = EndfieldWidgets.colorGeometry(controlRight());
+        if (mouseX >= box.chipX() && mouseX < box.chipX() + box.swatchHitW()) {
+            palettePanel.open(entry, box.swatchX(), box.swatchW(), row.y());
+            return true;
         }
-        return true;
+        if (mouseX >= box.hexFieldX() && mouseX < box.hexFieldX() + box.hexFieldW()) {
+            palettePanel.close();
+            editor.open(this, colorKey(entry), box.hexFieldX(), row.y() + FieldEditor.FIELD_TOP, box.hexFieldW(),
+                    ValueCodec.hexOf(ValueCodec.colorOf(current)), true, 16, text -> {
+                        WrapColor parsed = ValueCodec.tryParseWrapColor(text);
+                        if (parsed != null) {
+                            write(entry, parsed);
+                        }
+                    });
+            return true;
+        }
+        return false;
     }
 
-    /**
-     * 名单：打开宿主的注册表选择屏。
-     *
-     * <p>回调里重建一份 {@code EntrySet} 再写回：Baritone 的访问器按 {@code list()} 取值，
-     * 原地改那个 {@code set} 不会反映到它的字段上。
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    /** 名单：打开宿主的注册表选择屏。 */
     private void openEntrySet(Entry entry, EntrySet<?> set) {
-        try {
-            ScreenAccess.of(new RegistrySelectScreen(
-                            set.registry(),
-                            set.set(),
-                            (java.util.function.Consumer<java.util.Set>) selected -> {
-                                if (selected != null) {
-                                    write(entry, new EntrySet(set.registry(), selected));
-                                }
-                            },
-                            NewClickGui.elementFactory()))
-                    .openFromCurrent();
-        } catch (Throwable e) {
-            me.matl114.utils.Debug.info("[SFH+] Baritone 名单选择屏打开失败: " + e);
-        }
+        HostEditors.openEntrySet(
+                set, next -> write(entry, next), NewClickGui.popupFactory(settings), "Baritone 名单选择屏打开失败");
+    }
+
+    /** 映射：打开宿主的方块替换表编辑器（单次点击直接进入列表编辑界面）。 */
+    private void openPrimitiveMap(Entry entry) {
+        HostEditors.openPrimitiveMapAccessor(
+                entry.accessor(), entry.name(), NewClickGui.popupFactory(settings), "Baritone 替换表打开失败");
     }
 
     /**
@@ -979,8 +941,9 @@ public class BaritonePage extends GenericScreen {
         if (mouseY < bodyTop() || mouseY > bodyTop() + bodyHeight()) {
             return false;
         }
-        // 滚动会挪动行，下拉与输入框跟着旧坐标走就会错位，直接收起来
+        // 滚动会挪动行，下拉、调色盘与输入框跟着旧坐标走就会错位，直接收起来
         dropdown = null;
+        palettePanel.close();
         editor.close();
         buildRows();
         scroll = Math.max(0, Math.min(maxScroll(), scroll - (int) (Math.signum(amount) * 18)));

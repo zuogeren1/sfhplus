@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import me.matl114.accessors.gui.ScreenAccess;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.gui.GenericScreen;
 import me.matl114.utils.ClientUtils;
 import me.matl114.versioned.api.VDrawContext;
@@ -14,7 +14,8 @@ import me.zuogeren.slimefunhelperplus.module.custommodel.CustomModelModule;
 import me.zuogeren.slimefunhelperplus.module.custommodel.ModelCatalog;
 import me.zuogeren.slimefunhelperplus.module.custommodel.model.ModelRuntime;
 import me.zuogeren.slimefunhelperplus.module.custommodel.ui.Ef;
-import me.zuogeren.slimefunhelperplus.module.custommodel.ui.EfWidget;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
+import me.zuogeren.slimefunhelperplus.ui.EfWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -69,7 +70,7 @@ public class ModelRouletteScreen extends GenericScreen {
     }
 
     /** 轮盘固定用深色样式：它铺在世界画面上，浅色纸面会把角色挡掉。 */
-    private final Ef.Palette pal = Ef.palette(false);
+    private final EfCanvas.Palette pal = Ef.palette(false);
 
     private final List<ModelRuntime.ExtraOption> options = new ArrayList<>();
     /** 主轮盘：服装预设、没有分类的动作、每个分类一个入口。 */
@@ -154,7 +155,7 @@ public class ModelRouletteScreen extends GenericScreen {
         if (ClientUtils.getScreen() instanceof ModelRouletteScreen) {
             return;
         }
-        ScreenAccess.of(new ModelRouletteScreen()).openFromCurrent();
+        HostScreens.open(new ModelRouletteScreen());
     }
 
     /**
@@ -375,7 +376,7 @@ public class ModelRouletteScreen extends GenericScreen {
         int size = RouletteTheme.ARROW_SIZE;
         int x = arrowX(direction) - size / 2;
         int y = centerY - size / 2;
-        Ef.Corner corner = direction < 0 ? Ef.Corner.TL : Ef.Corner.BR;
+        EfCanvas.Corner corner = direction < 0 ? EfCanvas.Corner.TL : EfCanvas.Corner.BR;
         if (enabled && hot) {
             Ef.cutFill(ctx, x, y, size, size, RouletteTheme.arrowHover(pal), pal.cutWide(), corner);
         } else if (enabled) {

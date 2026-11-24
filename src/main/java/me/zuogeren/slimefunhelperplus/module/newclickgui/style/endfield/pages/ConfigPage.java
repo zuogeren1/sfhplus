@@ -8,11 +8,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import me.matl114.accessors.gui.ScreenAccess;
-import me.matl114.gui.basic.DrawableWidget;
-import me.matl114.gui.presets.choices.RegistrySelectScreen;
-import me.matl114.hacks.utils.config.NBTTypes;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.HostEditorScreen;
 import me.matl114.gui.GenericScreen;
 import me.matl114.hacks.api.BaseModule.WrapperConfigRef;
 import me.matl114.managers.config.Config;
@@ -36,39 +31,47 @@ import me.matl114.hacks.utils.config.OptionalPrimitive;
 import me.matl114.hacks.utils.config.PrimitiveList;
 import me.matl114.hacks.utils.config.PrimitiveMap;
 import me.matl114.hacks.utils.config.RegexList;
-import me.matl114.hacks.utils.config.BoundedPrimitiveFlagMap;
+import me.matl114.hacks.utils.config.BoundedPrimitiveMap;
 import me.matl114.hacks.utils.config.EntityTypeEntrySet;
+import me.matl114.hacks.utils.config.EnumPrimitiveList;
 import me.matl114.hacks.utils.config.GuiSetting;
 import me.matl114.hacks.utils.config.LabelVec2;
 import me.matl114.hacks.utils.config.LabelVec3;
+import me.matl114.hacks.utils.config.PrimitivePairList;
+import me.matl114.hacks.utils.config.RegistryRegex;
 import me.matl114.hacks.utils.config.StringEnum;
 import me.matl114.hacks.utils.config.Vec2;
 import me.matl114.hacks.utils.config.Vec3;
+import me.matl114.hacks.utils.config.WeakHolder;
+import me.matl114.hacks.utils.config.WeakRegistryRegex;
 import me.matl114.hacks.utils.config.WidgetPos;
 import me.matl114.managers.config.ListRef;
-import me.matl114.managers.config.NBTType;
-import me.matl114.utils.config.AttrKeyValue;
-import me.matl114.utils.config.WrapperFactory;
-import me.matl114.utils.config.kv.WrapperAttrKeyValue;
 import me.matl114.hacks.utils.config.Regex;
 import me.matl114.hacks.utils.config.StringFormat;
 import me.matl114.hacks.utils.config.WrapColor;
 import me.matl114.hacks.utils.config.WrapEnum;
+import me.matl114.hacks.utils.config.WrapRGBA;
 import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
+import me.zuogeren.slimefunhelperplus.hostgui.HostEditors;
+import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
+import me.zuogeren.slimefunhelperplus.hostgui.StringChoicesRegistry;
 import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.RecordFieldOps;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.core.ValueCodec;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.Ef;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyle;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EfWidget;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldClickGuiScreen;
-import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldColorPalette;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldTabBar;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.EndfieldWidgets;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.style.endfield.FieldEditor;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
+import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
+import me.zuogeren.slimefunhelperplus.ui.EfWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 
 /**
  * 「全配置」页：把宿主每一份配置文件的可见设置摊成一张总表。
@@ -101,8 +104,11 @@ public class ConfigPage extends GenericScreen {
     private static final int BTN = 13;
     /** 值槽（就地编辑的那一格）的宽度：右沿正好让到减号左边，与 ± 两键不重叠。 */
     private static final int VALUE_W = 56;
-    /** 枚举下拉里一行候选的高度。 */
+    /** 枚举下拉里一行候选的高度与最大可见行数。 */
     private static final int DROP_ROW_H = 13;
+    private static final int DROP_MAX_ROWS = 12;
+    private static final int ARROW_W = 14;
+    private static final int OPTIONAL_RECORD_BASE = 100;
 
     /** GUI 设置入口块上的字：与模块配置页同一个词。 */
     private static final String GUI_SETTING_CHIP = "详细设置";
@@ -138,6 +144,16 @@ public class ConfigPage extends GenericScreen {
 
     /** 下拉盖住的是记录里的第几格；不是记录型时为 -1。 */
     private int dropdownPart = -1;
+    private int dropScroll;
+
+    /** 打开中的调色盘浮层（WrapColor / WrapRGBA / 可选 TextColor 共用）。 */
+    private final EndfieldColorPalette palettePanel = new EndfieldColorPalette();
+
+    /** 行内辅助按钮悬停信息（每帧重算，优先于普通项说明）。 */
+    private StringFormat formatArgumentHover;
+    private StringFormat editorHover;
+    private boolean itemTemplateHover;
+    private String regexPreviewHover;
 
     /** 正在等按键的那一条：记路径，列表重建后仍是同一项。 */
     private String keyTarget;
@@ -177,7 +193,7 @@ public class ConfigPage extends GenericScreen {
         return settings != null && settings.light();
     }
 
-    private Ef.Palette pal() {
+    private EfCanvas.Palette pal() {
         return Ef.palette(light()).withAlpha(NewClickGui.opacity());
     }
 
@@ -199,6 +215,8 @@ public class ConfigPage extends GenericScreen {
         editor.close();
         dropdownKey = null;
         dropdownPart = -1;
+        dropScroll = 0;
+        palettePanel.close();
         this.roots.clear();
         this.itemCache.clear();
         for (Config config : Config.REGISTRY.stream().toList()) {
@@ -385,10 +403,7 @@ public class ConfigPage extends GenericScreen {
     }
 
     private static String sectionTitle(String section) {
-        if (section.isEmpty()) {
-            return "主设置";
-        }
-        return Component.translatableWithFallback("config.index." + section, leaf(section)).getString();
+        return ValueCodec.sectionTitle(section);
     }
 
     private static String rootName(Config config) {
@@ -418,66 +433,59 @@ public class ConfigPage extends GenericScreen {
     }
 
     private static String leaf(String path) {
-        if (path == null || path.isEmpty()) {
-            return "";
-        }
-        int dot = path.lastIndexOf('.');
-        return dot < 0 ? path : path.substring(dot + 1);
+        return ValueCodec.leaf(path);
     }
 
     // ------------------------------------------------------------------ 值
 
     private static boolean isNumeric(Ref<?> ref) {
-        return ref instanceof IntRef
-                || ref instanceof LongRef
-                || ref instanceof DoubleRef
-                || ref instanceof FloatRef;
+        return ValueCodec.isNumericRef(ref);
     }
 
     /** 这一页真正给了控件的类型；其余只显示当前值。 */
     private static boolean writable(Ref<?> ref) {
+        Object val = ref.getValue();
         return ref instanceof FlagRef
                 || isNumeric(ref)
                 || ref instanceof EnumRef<?>
                 || ref instanceof StringRef
                 || ref instanceof KeyBindRef
-                || ref.getValue() instanceof WrapColor
-                || ref.getValue() instanceof Regex
-                || ref.getValue() instanceof StringFormat
-                || ref.getValue() instanceof OptionalPrimitive<?>
-                || ref.getValue() instanceof EntrySet<?>
+                || val instanceof WrapColor
+                || val instanceof WrapRGBA
+                || val instanceof Regex
+                || val instanceof RegistryRegex<?>
+                || val instanceof WeakRegistryRegex<?>
+                || val instanceof StringFormat
+                || val instanceof OptionalPrimitive<?>
+                || val instanceof EntrySet<?>
                 || ref instanceof ListRef
-                || ref.getValue() instanceof RegexList
-                || ref.getValue() instanceof PrimitiveList<?>
-                || ref.getValue() instanceof PrimitiveMap<?, ?>
-                || ref.getValue() instanceof ItemStackTemplate
-                || ref.getValue() instanceof Holder<?>
-                || ref.getValue() instanceof StringEnum
-                || ref.getValue() instanceof WidgetPos
-                || ref.getValue() instanceof GuiSetting
-                || ref.getValue() instanceof EntityTypeEntrySet
-                || ref.getValue() instanceof BoundedPrimitiveFlagMap<?>
-                || ref.getValue() instanceof LabelVec2
-                || ref.getValue() instanceof LabelVec3
-                || booleanParts(ref.getValue()) != null
-                || recordParts(ref.getValue()) != null;
+                || val instanceof RegexList
+                || val instanceof PrimitiveList<?>
+                || val instanceof PrimitivePairList<?, ?>
+                || val instanceof PrimitiveMap<?, ?>
+                || val instanceof EnumPrimitiveList<?, ?>
+                || val instanceof ItemStackTemplate
+                || val instanceof Holder<?>
+                || val instanceof WeakHolder<?>
+                || val instanceof StringEnum
+                || val instanceof WidgetPos
+                || val instanceof GuiSetting
+                || val instanceof EntityTypeEntrySet
+                || val instanceof BoundedPrimitiveMap<?, ?>
+                || val instanceof LabelVec2
+                || val instanceof LabelVec3
+                || booleanParts(val) != null
+                || recordParts(val) != null;
     }
 
-    /** 值框里写一段文本的那几类：物品模板写 id，注册表条目写「注册表|条目」。 */
+    /** 值框里写一段文本的那几类：注册表条目写「注册表|条目」。 */
     private static boolean textValueRow(Ref<?> ref) {
-        return ref.getValue() instanceof ItemStackTemplate || ref.getValue() instanceof Holder<?>;
+        return ref.getValue() instanceof Holder<?> || ref.getValue() instanceof WeakHolder<?>;
     }
 
     /** 值框里的原文：与宿主存盘格式一致，写回时再解析。 */
     private static String textValueRowOf(Ref<?> ref) {
-        Object value = ref.getValue();
-        if (value instanceof ItemStackTemplate template) {
-            return template.itemId().toString();
-        }
-        if (value instanceof Holder<?> holder) {
-            return holder.asString();
-        }
-        return "";
+        return ValueCodec.editableTextOf(ref.getValue());
     }
 
     /** 按 Ref 找回它的配置路径：计数块的编辑屏要用它当键名。 */
@@ -490,167 +498,46 @@ public class ConfigPage extends GenericScreen {
         return "";
     }
 
-    /** 计数块那几类：值本身是一串条目，点开交给宿主的编辑屏。 */
+    /** 计数块那几类：值本身是一串条目或映射，点开交给宿主的编辑屏。 */
     private static boolean countRow(Ref<?> ref) {
+        Object val = ref.getValue();
         return ref instanceof ListRef
-                || ref.getValue() instanceof RegexList
-                || ref.getValue() instanceof PrimitiveList<?>
-                || ref.getValue() instanceof PrimitiveMap<?, ?>;
+                || val instanceof RegexList
+                || val instanceof PrimitiveList<?>
+                || val instanceof PrimitivePairList<?, ?>
+                || val instanceof PrimitiveMap<?, ?>
+                || val instanceof EnumPrimitiveList<?, ?>
+                || val instanceof BoundedPrimitiveMap<?, ?>;
     }
 
     /** 计数块上的文字：条目数。 */
     private static int countOf(Ref<?> ref) {
-        Object value = ref.getValue();
-        if (ref instanceof ListRef listRef) {
-            return listRef.get().size();
-        }
-        if (value instanceof RegexList regexList) {
-            return regexList.patterns().size();
-        }
-        if (value instanceof PrimitiveList<?> list) {
-            return list.list().size();
-        }
-        if (value instanceof PrimitiveMap<?, ?> map) {
-            return map.toPrimitiveMap().size();
-        }
-        return 0;
+        int count = ValueCodec.listCountOf(ref, ref.getValue());
+        return Math.max(0, count);
     }
 
-    /**
-     * 一条记录里的几格：全是数值或枚举才算，别的类型交回只读。
-     *
-     * <p>两格到八格都接：宿主里两个数值的记录（{@code Vec2}）、
-     * 「两个数值 + 一个枚举」的记录（{@code PredictArgument}）都很常见。
-     */
     private static Object[] recordParts(Object value) {
-        if (value == null || !value.getClass().isRecord()) {
-            return null;
-        }
-        java.lang.reflect.RecordComponent[] parts = value.getClass().getRecordComponents();
-        if (parts.length < 2 || parts.length > 8) {
-            return null;
-        }
-        Object[] out = new Object[parts.length];
-        try {
-            for (int i = 0; i < parts.length; i++) {
-                Object part = parts[i].getAccessor().invoke(value);
-                if (!(part instanceof Number) && !(part instanceof Enum<?>)) {
-                    return null;
-                }
-                out[i] = part;
-            }
-        } catch (Throwable e) {
-            return null;
-        }
-        return out;
+        return RecordFieldOps.recordParts(value);
     }
 
-    /** 这一行占几格：记录按分量数铺开，其余类型都是一格。绘制与布局必须取同一个数。 */
     private static int rowParts(Ref<?> ref) {
-        if (ref == null) {
-            return 1;
-        }
-        Object[] parts = recordParts(ref.getValue());
-        if (parts != null) {
-            return parts.length;
-        }
-        boolean[] bools = booleanParts(ref.getValue());
-        if (bools != null) {
-            return bools.length;
-        }
-        // 位置配置画两行（X / Y），行高必须跟着算两行，否则下一行会压上来
-        if (ref.getValue() instanceof WidgetPos) {
-            return 2;
-        }
-        // 带标签的向量：标签是记录里的字符串，数值是内层的 Vec2 / Vec3
-        if (ref.getValue() instanceof LabelVec2) {
-            return 2;
-        }
-        if (ref.getValue() instanceof LabelVec3) {
-            return 3;
-        }
-        return 1;
+        return ref == null ? 1 : RecordFieldOps.rowParts(ref.getValue());
     }
 
-    /**
-     * 一条记录里的几格开关：全是布尔才算，混着别的类型就交回只读。
-     *
-     * <p>与 {@link #recordParts} 分开认：开关和数值的行高一样，但画法与命中都不同，
-     * 合成一个数组会让「这一格是数值还是开关」在每处都要再判一次。
-     */
     private static boolean[] booleanParts(Object value) {
-        if (value == null || !value.getClass().isRecord()) {
-            return null;
-        }
-        java.lang.reflect.RecordComponent[] parts = value.getClass().getRecordComponents();
-        if (parts.length < 2 || parts.length > 8) {
-            return null;
-        }
-        boolean[] out = new boolean[parts.length];
-        try {
-            for (int i = 0; i < parts.length; i++) {
-                Object part = parts[i].getAccessor().invoke(value);
-                if (!(part instanceof Boolean flag)) {
-                    return null;
-                }
-                out[i] = flag;
-            }
-        } catch (Throwable e) {
-            return null;
-        }
-        return out;
+        return RecordFieldOps.booleanParts(value);
     }
 
-    /** 记录里每一格的字段名：驼峰转成两个大写词（{@code ticksLater} → {@code TICKS LATER}）。 */
     private static String[] componentNames(Object value) {
-        java.lang.reflect.RecordComponent[] parts = value.getClass().getRecordComponents();
-        String[] names = new String[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            names[i] = spacedUpper(parts[i].getName());
-        }
-        return names;
+        return RecordFieldOps.componentNames(value);
     }
 
-    private static String spacedUpper(String raw) {
-        StringBuilder out = new StringBuilder(raw.length() + 4);
-        for (int i = 0; i < raw.length(); i++) {
-            char c = raw.charAt(i);
-            if (i > 0 && Character.isUpperCase(c) && out.length() > 0) {
-                out.append(' ');
-            }
-            out.append(Character.toUpperCase(c));
-        }
-        return out.toString();
-    }
-
-    /** 换掉记录里的一格；数值会先按那一格的声明类型还原。 */
     private static Object withPart(Object value, int index, Object next) {
-        try {
-            java.lang.reflect.RecordComponent[] parts = value.getClass().getRecordComponents();
-            Object[] args = new Object[parts.length];
-            for (int i = 0; i < parts.length; i++) {
-                args[i] = i == index ? next : parts[i].getAccessor().invoke(value);
-            }
-            Class<?>[] types = new Class<?>[parts.length];
-            for (int i = 0; i < parts.length; i++) {
-                types[i] = parts[i].getType();
-            }
-            return value.getClass().getDeclaredConstructor(types).newInstance(args);
-        } catch (Throwable e) {
-            return value;
-        }
+        return RecordFieldOps.withPart(value, index, next);
     }
 
     private static Object withNumericPart(Object value, int index, double next) {
-        try {
-            java.lang.reflect.RecordComponent[] parts = value.getClass().getRecordComponents();
-            if (index >= 0 && index < parts.length) {
-                return withPart(value, index, coerce(parts[index].getType(), next));
-            }
-        } catch (Throwable ignored) {
-            // 读不出记录结构就保持原值
-        }
-        return value;
+        return RecordFieldOps.withNumericPart(value, index, next);
     }
 
     /** 可选值：行尾一个开关决定这一项是否生效，左边是内层值自己的控件。 */
@@ -660,12 +547,7 @@ public class ConfigPage extends GenericScreen {
 
     /** 可选值的内层：没启用或取不到时返回 null。 */
     private static Object optionalInner(Ref<?> ref) {
-        Object raw = ref.getValue();
-        if (!(raw instanceof OptionalPrimitive<?> optional) || !optional.isPresent()) {
-            return null;
-        }
-        Object inner = optional.getValue();
-        return inner instanceof WrapEnum<?> wrap ? wrap.value : inner;
+        return RecordFieldOps.optionalPresentInner(ref.getValue());
     }
 
     /** 就地文本编辑的那几类：值本身就是一段可读写的字符串，不需要另开编辑器。 */
@@ -677,169 +559,70 @@ public class ConfigPage extends GenericScreen {
 
     /** 文本类配置的原文：显示会截断，回填与写回都必须拿完整值。 */
     private static String editableTextOf(Ref<?> ref) {
-        Object value = ref.getValue();
-        if (value instanceof Regex regex) {
-            return regex.regex();
-        }
-        if (value instanceof StringFormat format) {
-            return format.formatString();
-        }
-        return textValueOf(ref);
+        return ValueCodec.editableTextOf(ref.getValue());
     }
 
     private static double numericOf(Ref<?> ref) {
-        Object value = ref.getValue();
-        return value instanceof Number number ? number.doubleValue() : 0.0D;
+        return ValueCodec.numericOf(ref.getValue());
     }
 
     private static double stepOf(Ref<?> ref) {
-        if (ref instanceof IntRef || ref instanceof LongRef) {
-            return 1.0D;
-        }
-        double magnitude = Math.abs(numericOf(ref));
-        return magnitude >= 10.0D ? 1.0D : (magnitude >= 1.0D ? 0.5D : 0.1D);
+        return ValueCodec.stepOf(ref);
     }
 
-    /** 按 Ref 的实际类型写回：整数取整，小数留两位；步进与手输走同一条路，口径不会分叉。 */
     private static void setNumber(Ref<?> ref, double value) {
-        if (ref instanceof IntRef intRef) {
-            intRef.set((int) Math.round(value));
-        } else if (ref instanceof LongRef longRef) {
-            longRef.set(Math.round(value));
-        } else if (ref instanceof DoubleRef doubleRef) {
-            doubleRef.set(Math.round(value * 100.0D) / 100.0D);
-        } else if (ref instanceof FloatRef floatRef) {
-            floatRef.set((float) (Math.round(value * 100.0D) / 100.0D));
-        }
+        ValueCodec.setNumeric(ref, value);
     }
 
     private static void nudge(Ref<?> ref, double delta) {
         setNumber(ref, numericOf(ref) + delta);
     }
 
-    /** 输入框里的数：解析不了（"-"、"." 这种打到一半的）就不动配置。 */
     private static void commitNumber(Ref<?> ref, String text) {
-        try {
-            double value = Double.parseDouble(text.trim().replace(',', '.'));
-            // "NaN"/"Infinity" 也解析得出来，但写进配置就是坏值
-            if (!Double.isFinite(value)) {
-                return;
-            }
+        Double value = ValueCodec.tryParseNumber(text);
+        if (value != null) {
             setNumber(ref, value);
-        } catch (NumberFormatException ignored) {
-            // 半截输入不是错误，继续等下一个字
         }
     }
 
-    /** 文本提交：交的是 trim 之后的原文，空串照写（空串是合法取值，不是"没改"）。 */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private static void commitText(Ref<?> ref, String text) {
-        String next = text.trim();
-        if (ref instanceof StringRef stringRef) {
-            stringRef.set(next);
-            return;
-        }
-        if (ref.getValue() instanceof Regex) {
-            // 非法表达式不落配置：打到一半的括号不该把这一项变成永远匹配不上的正则
-            try {
-                ((Ref) ref).setValue(new Regex(next));
-            } catch (RuntimeException ignored) {
-                // 表达式还不完整，等打完
-            }
-            return;
-        }
-        if (ref.getValue() instanceof StringFormat format) {
-            ((Ref) ref).setValue(format.withFormatString(next));
-        }
+        ValueCodec.commitText(ref, text);
     }
 
-    /** 切「这一项是否生效」：内层值原样保留，只翻 present。 */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private static void setOptionalPresent(Ref<?> ref, boolean present) {
-        Object raw = ref.getValue();
-        if (raw instanceof OptionalPrimitive optional) {
-            ((Ref) ref).setValue(optional.withPresent(present));
-        }
+        RecordFieldOps.setOptionalPresent(ref, present);
     }
 
-    /** 可选值内层的数值写回：按内层原本的数值类型还原，别把 Double 写成 Integer。 */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private static void writeOptionalNumber(Ref<?> ref, double value) {
-        Object raw = ref.getValue();
-        if (!(raw instanceof OptionalPrimitive optional)) {
-            return;
-        }
-        Object inner = optional.getValue();
-        if (!(inner instanceof Number number)) {
-            return;
-        }
-        ((Ref) ref).setValue(optional.withValue(coerce(number.getClass(), value)));
+        RecordFieldOps.writeOptionalNumber(ref, value);
     }
 
-    /** 可选值内层的枚举写回：内层是 {@code WrapEnum} 的要原样包回去，宿主按包装类型序列化。 */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private static void writeOptionalOption(Ref<?> ref, Object option) {
-        Object raw = ref.getValue();
-        if (!(raw instanceof OptionalPrimitive optional)) {
-            return;
-        }
-        Object next = optional.getValue() instanceof WrapEnum<?> ? new WrapEnum<>((ConfigEnum) option) : option;
-        ((Ref) ref).setValue(optional.withValue(next));
+        RecordFieldOps.writeOptionalOption(ref, option);
     }
 
-    /** 按目标类型还原数值：内层是 Integer 就不能塞 Double 进去。 */
-    private static Object coerce(Class<?> type, double value) {
-        if (type == double.class || type == Double.class) {
-            return value;
-        }
-        if (type == float.class || type == Float.class) {
-            return (float) value;
-        }
-        if (type == int.class || type == Integer.class) {
-            return (int) Math.round(value);
-        }
-        if (type == long.class || type == Long.class) {
-            return Math.round(value);
-        }
-        if (type == short.class || type == Short.class) {
-            return (short) Math.round(value);
-        }
-        if (type == byte.class || type == Byte.class) {
-            return (byte) Math.round(value);
-        }
-        return value;
-    }
-
-    /**
-     * 颜色提交：只认 {@code #RRGGBB} 与命名色。
-     *
-     * <p>十六进制按定长六位挡：{@code #} 开头的串只当十六进制解释，{@code "#12"} 会被收成 RGB(0x12)，
-     * 打到一半的半截值不能就这样改掉配置。
-     */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static void commitColor(Ref<?> ref, String text) {
-        String value = text.trim().toLowerCase(Locale.ROOT);
-        if (value.startsWith("#") && !fullHex(value)) {
+        TextColor nextColor = ValueCodec.tryParseTextColor(text);
+        if (nextColor == null) {
             return;
         }
-        try {
-            ((Ref) ref).setValue(new WrapColor(value));
-        } catch (RuntimeException ignored) {
-            // 名字拼错或者打到一半（空串、单独的 "#"）：等打完
+        Object current = ref.getValue();
+        if (current instanceof WrapColor) {
+            ((Ref) ref).setValue(new WrapColor(nextColor));
+        } else if (current instanceof WrapRGBA rgba) {
+            ((Ref) ref).setValue(rgba.withTextColor(nextColor));
+        } else if (current instanceof OptionalPrimitive<?> opt && opt.getValue() instanceof TextColor) {
+            RecordFieldOps.writeOptionalTextColor(ref, nextColor.getValue());
         }
     }
 
-    /** 整串是否就是 {@code #} 加六位十六进制。 */
-    private static boolean fullHex(String value) {
-        if (value.length() != 7) {
-            return false;
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void commitAlpha(Ref<?> ref, String text) {
+        Integer alpha = ValueCodec.tryParseAlpha(text);
+        if (alpha != null && ref.getValue() instanceof WrapRGBA rgba) {
+            ((Ref) ref).setValue(rgba.withAlpha(alpha));
         }
-        for (int i = 1; i < value.length(); i++) {
-            if (Character.digit(value.charAt(i), 16) < 0) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** 文本行的原文：显示会截断，回填与写回都必须拿完整值。 */
@@ -853,12 +636,7 @@ public class ConfigPage extends GenericScreen {
     }
 
     private static String enumLabel(Object value) {
-        if (value instanceof ConfigEnum configEnum) {
-            String name = configEnum.cast().name();
-            String key = "configenum." + configEnum.getConfigEnumType().replace('_', '-') + "." + name.toLowerCase(Locale.ROOT);
-            return Component.translatableWithFallback(key, name).getString();
-        }
-        return String.valueOf(value);
+        return ValueCodec.enumLabel(value);
     }
 
     /** 枚举取值可能没注册完成，读不到就画一个占位，别让整页因为一格坏掉。 */
@@ -895,7 +673,12 @@ public class ConfigPage extends GenericScreen {
                 // 有限字符串候选不是 ConfigEnum：候选走另一条路，见 stringEnumOptions
                 return List.of();
             }
-            if (part >= 0) {
+            if (part >= OPTIONAL_RECORD_BASE) {
+                Object inner = optionalInner(ref);
+                Object[] parts = recordParts(inner);
+                int index = part - OPTIONAL_RECORD_BASE;
+                value = parts != null && index < parts.length ? parts[index] : null;
+            } else if (part >= 0) {
                 Object[] parts = recordParts(value);
                 value = parts != null && part < parts.length ? parts[part] : null;
             } else if (value instanceof OptionalPrimitive<?>) {
@@ -929,7 +712,12 @@ public class ConfigPage extends GenericScreen {
     private static ConfigEnum currentEnum(Ref<?> ref, int part) {
         try {
             Object value = ref.getValue();
-            if (part >= 0) {
+            if (part >= OPTIONAL_RECORD_BASE) {
+                Object inner = optionalInner(ref);
+                Object[] parts = recordParts(inner);
+                int index = part - OPTIONAL_RECORD_BASE;
+                value = parts != null && index < parts.length ? parts[index] : null;
+            } else if (part >= 0) {
                 Object[] parts = recordParts(value);
                 value = parts != null && part < parts.length ? parts[part] : null;
             } else if (value instanceof OptionalPrimitive<?>) {
@@ -941,14 +729,14 @@ public class ConfigPage extends GenericScreen {
         }
     }
 
-    /**
-     * 下拉里要画的候选文字：枚举与有限字符串候选共用一套面板。
-     *
-     * <p>两者候选来源不同（一个取 {@code ConfigEnum#getMap()}，一个取 {@code StringEnum#values()}），
-     * 但面板、命中与写回都是同一件事，所以在这里统一成「一串标签 + 一个下标」。
-     */
-    private static List<String> optionLabels(Ref<?> ref, int part) {
+    /** 下拉里要画的候选文字：依次支持路径字符串候选表、有限字符串候选与枚举。 */
+    private static List<String> optionLabels(Item item, int part) {
+        Ref<?> ref = item.ref();
         if (part < 0) {
+            List<String> pathChoices = StringChoicesRegistry.ofPath(item.path());
+            if (!pathChoices.isEmpty()) {
+                return pathChoices;
+            }
             List<String> strings = stringEnumOptions(ref);
             if (!strings.isEmpty()) {
                 return strings;
@@ -963,8 +751,13 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 当前项在候选里的标签：只用来标出哪一行是当前值。 */
-    private static String currentOptionLabel(Ref<?> ref, int part) {
+    private static String currentOptionLabel(Item item, int part) {
+        Ref<?> ref = item.ref();
         if (part < 0) {
+            List<String> pathChoices = StringChoicesRegistry.ofPath(item.path());
+            if (!pathChoices.isEmpty() && ref instanceof StringRef str) {
+                return str.get();
+            }
             Object value = ref.getValue();
             if (value instanceof StringEnum choice) {
                 return choice.value();
@@ -974,10 +767,18 @@ public class ConfigPage extends GenericScreen {
         return current == null ? null : enumLabel(current);
     }
 
-    /** 写回下拉里选中的那一项：枚举与有限字符串候选各走各的写入口。 */
+    /** 写回下拉里选中的那一项：字符串候选、记录分量与普通枚举各走各的写入口。 */
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private void selectOption(Ref<?> ref, int index, int part) {
+    private void selectOption(Item item, int index, int part) {
+        Ref<?> ref = item.ref();
         if (part < 0) {
+            List<String> pathChoices = StringChoicesRegistry.ofPath(item.path());
+            if (!pathChoices.isEmpty() && ref instanceof StringRef str) {
+                if (index >= 0 && index < pathChoices.size()) {
+                    str.set(pathChoices.get(index));
+                }
+                return;
+            }
             List<String> strings = stringEnumOptions(ref);
             if (!strings.isEmpty()) {
                 if (index >= 0 && index < strings.size()) {
@@ -991,7 +792,9 @@ public class ConfigPage extends GenericScreen {
         }
         List<ConfigEnum> enums = enumOptions(ref, part);
         if (index >= 0 && index < enums.size()) {
-            if (part >= 0) {
+            if (part >= OPTIONAL_RECORD_BASE) {
+                RecordFieldOps.writeOptionalRecordPart(ref, part - OPTIONAL_RECORD_BASE, enums.get(index));
+            } else if (part >= 0) {
                 ((Ref) ref).setValue(withPart(ref.getValue(), part, enums.get(index)));
             } else {
                 selectEnum(ref, enums.get(index));
@@ -1022,10 +825,7 @@ public class ConfigPage extends GenericScreen {
     }
 
     private static String formatNumber(double value) {
-        if (Math.abs(value - Math.rint(value)) < 1.0e-6D) {
-            return String.format(Locale.ROOT, "%.0f", value);
-        }
-        return String.format(Locale.ROOT, "%.2f", value).replaceAll("0+$", "").replaceAll("\\.$", "");
+        return ValueCodec.formatNumber(value);
     }
 
     private static String valueText(Ref<?> ref) {
@@ -1109,8 +909,21 @@ public class ConfigPage extends GenericScreen {
         if (ref instanceof KeyBindRef bindRef) {
             return right - (Ef.textWidth(keyText(bindRef)) + 12);
         }
-        if (ref.getValue() instanceof WrapColor) {
-            return right - (2 + 12 + 5 + Ef.textWidth("#RRGGBB") + 2 + 3);
+        Object raw = ref.getValue();
+        if (raw instanceof WrapColor) {
+            return EndfieldWidgets.colorGeometry(right).chipX();
+        }
+        if (raw instanceof WrapRGBA) {
+            return EndfieldWidgets.rgbaGeometry(right).color().chipX();
+        }
+        if (raw instanceof OptionalPrimitive<?> opt) {
+            if (opt.isPresent() && opt.getValue() instanceof TextColor) {
+                return EndfieldWidgets.colorGeometry(right - 28).chipX();
+            }
+            if (opt.isPresent() && opt.getValue() instanceof CharSequence) {
+                return optionalTextSlot(right - 28, 0).x();
+            }
+            return right - 28 - readOnlyWidth() / 2;
         }
         return right - readOnlyWidth();
     }
@@ -1135,16 +948,21 @@ public class ConfigPage extends GenericScreen {
         return new Rect(controlLeft(item), rowY + FieldEditor.FIELD_TOP, w, FieldEditor.FIELD_H);
     }
 
-    /** 颜色行的值槽：与 {@link #paintColor} 的切角块同一份几何，点哪一格就是哪一格。 */
-    private Rect colorSlot(int rowY) {
-        int hexW = Ef.textWidth("#RRGGBB") + 2;
-        int w = 2 + 12 + 5 + hexW + 3;
-        return new Rect(itemsRight() - w, rowY + FieldEditor.FIELD_TOP, w, FieldEditor.FIELD_H);
-    }
-
     private boolean inValueSlot(Item item, int rowY, int mx, int my) {
         Rect slot = valueSlot(item, rowY);
         return mx >= slot.x() && mx < slot.x() + slot.w() && my >= slot.y() && my < slot.y() + slot.h();
+    }
+
+    private Rect optionalTextSlot(int innerRight, int rowY) {
+        int w = Math.max(60, Math.min(160, readOnlyWidth()));
+        return new Rect(innerRight - w, rowY + FieldEditor.FIELD_TOP, w, FieldEditor.FIELD_H);
+    }
+
+    /** 带右侧按钮行的文本框矩形（物品模板 / 注册表正则共用）。 */
+    private Rect trailingBtnSlot(int right, int rowY, int trailingCount) {
+        int tailW = trailingCount * (BTN + 2);
+        int w = Math.max(48, readOnlyWidth() - tailW);
+        return new Rect(right - tailW - w, rowY + FieldEditor.FIELD_TOP, w, FieldEditor.FIELD_H);
     }
 
     /**
@@ -1155,12 +973,16 @@ public class ConfigPage extends GenericScreen {
      */
     private Rect dropdownRect(Line line, int count) {
         int w = Math.min(itemsWidth(), Math.max(120, enumWidth(line.item().ref())));
-        int h = count * DROP_ROW_H + 4;
+        int visible = Math.min(count, DROP_MAX_ROWS);
+        int h = visible * DROP_ROW_H + 4;
         int x = Math.max(winX + 4, Math.min(winX + winW - 4 - w, itemsRight() - w));
-        // 记录里的枚举：面板贴的是那一格，不是整条记录的上沿
-        int y = line.y() + Math.max(0, dropdownPart) * ROW_H + ROW_H + 2;
+        // 记录与可选记录的下拉：面板贴到具体那一子行下面
+        int rowOffset = dropdownPart >= OPTIONAL_RECORD_BASE
+                ? (dropdownPart - OPTIONAL_RECORD_BASE + 1)
+                : Math.max(0, dropdownPart);
+        int y = line.y() + rowOffset * ROW_H + ROW_H + 2;
         if (y + h > winY + winH - 4) {
-            y = line.y() - h - 2;
+            y = line.y() + rowOffset * ROW_H - h - 2;
         }
         y = Math.max(winY + 4, Math.min(winY + winH - 4 - h, y));
         return new Rect(x, y, w, h);
@@ -1169,9 +991,13 @@ public class ConfigPage extends GenericScreen {
     // ------------------------------------------------------------------ 绘制
 
     private void paint(EfWidget self, VDrawContext ctx, int mouseX, int mouseY) {
-        Ef.Palette p = pal();
+        EfCanvas.Palette p = pal();
         buildLines();
         hovered = null;
+        formatArgumentHover = null;
+        editorHover = null;
+        itemTemplateHover = false;
+        regexPreviewHover = null;
         // 输入框默认白字，浅色主题的 panel 底上看不见
         editor.setTextColor(p.ink());
 
@@ -1180,17 +1006,18 @@ public class ConfigPage extends GenericScreen {
         paintBody(ctx, p, mouseX, mouseY);
         paintFooter(ctx, p);
         paintFrame(ctx, p);
-        // 下拉是浮层：越过正文裁剪与页脚，所以画在帧之后；说明框仍盖在它上面
+        // 下拉与调色盘是浮层：越过正文裁剪与页脚，所以画在帧之后；说明框仍盖在它们上面
         paintDropdown(ctx, p, mouseX, mouseY);
+        paintPalette(ctx, p, mouseX, mouseY);
         paintTip(ctx, p, mouseX, mouseY);
     }
 
-    private void paintBar(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintBar(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         // 命令栏就是整条分类条：当前分类高亮，点别的分类当场换页
-        tabBar.paint(ctx, winX, winY, winW, "Config", light(), mouseX, mouseY);
+        tabBar.paint(ctx, p, winX, winY, winW, "Config", light(), mouseX, mouseY);
     }
 
-    private void paintSearch(VDrawContext ctx, Ef.Palette p) {
+    private void paintSearch(VDrawContext ctx, EfCanvas.Palette p) {
         int y = searchTop();
         Ef.fill(ctx, winX, y, winW, SEARCH_H, p.panel());
         Ef.rule(ctx, winX, y + SEARCH_H - 1, winW, p.rule());
@@ -1216,7 +1043,7 @@ public class ConfigPage extends GenericScreen {
         }
     }
 
-    private void paintBody(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintBody(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         int top = bodyTop();
         int height = bodyHeight();
         Ef.fill(ctx, winX, top, winW, height, p.paper());
@@ -1234,7 +1061,7 @@ public class ConfigPage extends GenericScreen {
                 ctx, winX + winW - 4, top + 2, height - 6, itemScroll, listHeight, listViewH(), p.rule(), p.ink2());
     }
 
-    private void paintRail(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintRail(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         int x = winX;
         int chipX = x + 8;
         int chipW = Math.max(40, railW - 16);
@@ -1267,7 +1094,7 @@ public class ConfigPage extends GenericScreen {
         Ef.rule(ctx, x + 8, bodyTop() + 32, Math.max(1, railW - 16), p.rule());
     }
 
-    private void paintItems(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintItems(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         int ix = itemsX();
         int right = itemsRight();
 
@@ -1308,7 +1135,7 @@ public class ConfigPage extends GenericScreen {
         Ef.rule(ctx, ix, top + HEAD_H - 8, itemsWidth(), p.rule());
     }
 
-    private void paintSection(VDrawContext ctx, Ef.Palette p, Line line) {
+    private void paintSection(VDrawContext ctx, EfCanvas.Palette p, Line line) {
         int ix = itemsX();
         String section = line.section();
         String mark = section.isEmpty() ? "MAIN" : leaf(section).replace('-', ' ').toUpperCase(Locale.ROOT);
@@ -1320,7 +1147,7 @@ public class ConfigPage extends GenericScreen {
         Ef.rule(ctx, ix, line.y() + SECTION_H - 5, itemsWidth(), p.rule());
     }
 
-    private void paintRow(VDrawContext ctx, Ef.Palette p, Line line, int mouseX, int mouseY) {
+    private void paintRow(VDrawContext ctx, EfCanvas.Palette p, Line line, int mouseX, int mouseY) {
         int ix = itemsX();
         int right = itemsRight();
         int y = line.y();
@@ -1328,18 +1155,18 @@ public class ConfigPage extends GenericScreen {
         Ref<?> ref = item.ref();
 
         boolean hover = mouseY >= Math.max(y, listTop())
-                && mouseY < y + ROW_H
+                && mouseY < y + line.height()
                 && mouseX >= ix - 4
                 && mouseX <= right + 4;
         if (hover) {
             hovered = item;
-            Ef.fill(ctx, ix - 4, y, itemsWidth() + 8, ROW_H, Ef.mix(p.paper(), p.ink(), 0.05F));
-            Ef.fill(ctx, ix - 4, y, 3, ROW_H, p.trace());
+            Ef.fill(ctx, ix - 4, y, itemsWidth() + 8, line.height(), Ef.mix(p.paper(), p.ink(), 0.05F));
+            Ef.fill(ctx, ix - 4, y, 3, line.height(), p.trace());
         }
 
         int labelW = Math.max(24, controlLeft(item) - 8 - ix);
         Ef.text(ctx, Ef.ellipsis(labelOf(item), labelW), ix, y + 5, p.ink());
-        Ef.rule(ctx, ix - 4, y + ROW_H - 1, itemsWidth() + 8, Ef.alpha(p.rule(), 0.55F));
+        Ef.rule(ctx, ix - 4, y + line.height() - 1, itemsWidth() + 8, Ef.alpha(p.rule(), 0.55F));
 
         if (ref instanceof FlagRef flag) {
             int sw = 20;
@@ -1385,8 +1212,14 @@ public class ConfigPage extends GenericScreen {
             paintStringEnum(ctx, p, y, right, ref, choice);
         } else if (ref.getValue() instanceof EntityTypeEntrySet set) {
             paintCountChip(ctx, p, y, right, set.set().size() + " 项");
-        } else if (ref.getValue() instanceof BoundedPrimitiveFlagMap<?> flags) {
-            paintCountChip(ctx, p, y, right, flagCount(flags) + " 项");
+        } else if (ref.getValue() instanceof ItemStackTemplate template) {
+            paintItemTemplate(ctx, p, y, right, item, template, mouseX, mouseY);
+        } else if (ref.getValue() instanceof RegistryRegex<?> || ref.getValue() instanceof WeakRegistryRegex<?>) {
+            paintRegistryRegex(ctx, p, y, right, item, mouseX, mouseY);
+        } else if (ref.getValue() instanceof StringFormat format) {
+            paintStringFormat(ctx, p, y, right, item, format, mouseX, mouseY);
+        } else if (ref instanceof StringRef && !StringChoicesRegistry.ofPath(item.path()).isEmpty()) {
+            paintStringChoices(ctx, p, y, item, ((StringRef) ref).get(), mouseX, mouseY);
         } else if (ref.getValue() instanceof LabelVec2 label2) {
             paintLabelVec(ctx, p, y, right, ref, label2.xLabel(), label2.yLabel(), null,
                     label2.data().x(), label2.data().y(), 0, mouseX, mouseY);
@@ -1394,11 +1227,13 @@ public class ConfigPage extends GenericScreen {
             paintLabelVec(ctx, p, y, right, ref, label3.xLabel(), label3.yLabel(), label3.zLabel(),
                     label3.data().x(), label3.data().y(), label3.data().z(), mouseX, mouseY);
         } else if (optionalRow(ref)) {
-            paintOptional(ctx, p, y, right, ref);
+            paintOptional(ctx, p, y, right, item, mouseX, mouseY);
         } else if (ref instanceof KeyBindRef bindRef) {
             paintKeyBind(ctx, p, y, right, bindRef, item);
         } else if (ref.getValue() instanceof WrapColor color) {
-            paintColor(ctx, p, y, right, color);
+            paintColor(ctx, p, y, right, item, color);
+        } else if (ref.getValue() instanceof WrapRGBA rgba) {
+            paintRgba(ctx, p, y, right, item, rgba, mouseX, mouseY);
         } else if (textEditable(ref)) {
             paintValue(ctx, p, item, y, mouseX, mouseY);
         } else {
@@ -1408,21 +1243,14 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 值框：物品模板与注册表条目共用，静态态画虚线底边。 */
-    private void paintTextValueRow(VDrawContext ctx, Ef.Palette p, Item item, int y, int mouseX, int mouseY) {
+    private void paintTextValueRow(VDrawContext ctx, EfCanvas.Palette p, Item item, int y, int mouseX, int mouseY) {
         Rect slot = valueSlot(item, y);
-        if (editor.isOpenFor(editorKey(item))) {
-            FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
-            return;
-        }
-        boolean hot = mouseX >= slot.x() && mouseX < slot.x() + slot.w()
+        boolean editing = editor.isOpenFor(editorKey(item));
+        boolean hot = !editing && mouseX >= slot.x() && mouseX < slot.x() + slot.w()
                 && mouseY >= slot.y() && mouseY < slot.y() + slot.h();
-        if (hot) {
-            FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), false, true);
-        } else {
-            int lineY = slot.y() + slot.h() - 2;
-            for (int i = 0; i < slot.w(); i += 3) {
-                Ef.fill(ctx, slot.x() + i, lineY, Math.min(2, slot.w() - i), 1, p.rule());
-            }
+        EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, hot);
+        if (editing) {
+            return;
         }
         String text = textValueRowOf(item.ref());
         String shown = Ef.ellipsis(text, slot.w() - 8);
@@ -1430,12 +1258,8 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 计数块：一个「N 项 ▾」切角块，点开宿主的列表/键值编辑屏。 */
-    private void paintCount(VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref) {
-        String label = countOf(ref) + " 项   ▾";
-        int width = Ef.textWidth(label) + 10;
-        int x = right - width;
-        Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), p.cut());
-        Ef.text(ctx, label, x + 5, y + 5, p.ink());
+    private void paintCount(VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref) {
+        EndfieldWidgets.paintCountChip(ctx, p, y, right, countOf(ref) + " 项", p.cut(), false);
     }
 
     /**
@@ -1443,7 +1267,7 @@ public class ConfigPage extends GenericScreen {
      *
      * <p>行高由 {@link #rowParts} 按分量数算，绘制与布局取同一个数，下一行不会压上来。
      */
-    private void paintRecord(VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref, int mouseX, int mouseY) {
+    private void paintRecord(VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref, int mouseX, int mouseY) {
         Object[] parts = recordParts(ref.getValue());
         if (parts == null) {
             return;
@@ -1456,19 +1280,11 @@ public class ConfigPage extends GenericScreen {
                 double numeric = number.doubleValue();
                 String text = formatNumber(numeric);
                 Rect slot = new Rect(right - VALUE_W, partY + FieldEditor.FIELD_TOP, VALUE_W, FieldEditor.FIELD_H);
-                if (editor.isOpenFor(recordKey(ref, i))) {
-                    FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
-                } else {
-                    boolean hot = mouseX >= slot.x() && mouseX < slot.x() + slot.w()
-                            && mouseY >= slot.y() && mouseY < slot.y() + slot.h();
-                    if (hot) {
-                        FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), false, true);
-                    } else {
-                        int lineY = slot.y() + slot.h() - 2;
-                        for (int k = 0; k < slot.w(); k += 3) {
-                            Ef.fill(ctx, slot.x() + k, lineY, Math.min(2, slot.w() - k), 1, p.rule());
-                        }
-                    }
+                boolean editing = editor.isOpenFor(recordKey(ref, i));
+                boolean hot = !editing && mouseX >= slot.x() && mouseX < slot.x() + slot.w()
+                        && mouseY >= slot.y() && mouseY < slot.y() + slot.h();
+                EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, hot);
+                if (!editing) {
                     Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), partY + 5, p.ink());
                 }
             } else if (part instanceof ConfigEnum configEnum) {
@@ -1479,13 +1295,7 @@ public class ConfigPage extends GenericScreen {
                         open ? Ef.mix(p.chip(), p.ink(), 0.14F) : p.chip(), p.cut());
                 Ef.text(ctx, text, right - width + 5, partY + 5, p.ink());
             }
-            // 分量名右对齐贴着控件，与模块配置页同一套画法
-            String name = names[i];
-            int available = Math.max(0, Math.min(150, right - VALUE_W - 12 - itemsX() - 8));
-            if (available >= 18) {
-                String shown = Ef.ellipsis(name, available);
-                Ef.tracked(ctx, shown, right - VALUE_W - 12 - Ef.trackedWidth(shown, 1), partY + 5, p.ink2(), 1);
-            }
+            paintPartName(ctx, p, partY, right - VALUE_W - 12, names[i]);
         }
     }
 
@@ -1494,7 +1304,7 @@ public class ConfigPage extends GenericScreen {
      *
      * <p>行高由 {@link #rowParts} 按分量数算，绘制与布局取同一个数，下一行不会压上来。
      */
-    private void paintBooleanRecord(VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref) {
+    private void paintBooleanRecord(VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref) {
         boolean[] bools = booleanParts(ref.getValue());
         if (bools == null) {
             return;
@@ -1508,30 +1318,13 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 分量行名：右对齐贴着控件，宽度按可用空间截断，长字段名不会压到行名上。 */
-    private void paintPartName(VDrawContext ctx, Ef.Palette p, int y, int rightEdge, String name) {
-        if (name == null || name.isEmpty()) {
-            return;
-        }
-        int available = Math.max(0, Math.min(150, rightEdge - itemsX() - 8));
-        if (available < 18) {
-            return;
-        }
-        String shown = Ef.ellipsis(name, available);
-        Ef.tracked(ctx, shown, rightEdge - Ef.trackedWidth(shown, 1), y + 5, p.ink2(), 1);
+    private void paintPartName(VDrawContext ctx, EfCanvas.Palette p, int y, int rightEdge, String name) {
+        EndfieldWidgets.paintPartName(ctx, p, y, itemsX(), rightEdge, name, p.ink2());
     }
 
     /** 行尾那个小开关：开是实心块加纸色缺口，关是虚线框加小方块。 */
-    private void paintSwitch(VDrawContext ctx, Ef.Palette p, int y, int right, boolean on) {
-        int sw = 20;
-        int sh = 9;
-        int sy = y + (ROW_H - sh) / 2;
-        if (on) {
-            Ef.fill(ctx, right - sw, sy, sw, sh, p.ink());
-            Ef.fill(ctx, right - 9, sy + 2, 5, 5, p.paper());
-        } else {
-            Ef.dashedOutline(ctx, right - sw, sy, sw, sh, p.ink2());
-            Ef.fill(ctx, right - sw + 2, sy + 2, 5, 5, p.ink2());
-        }
+    private void paintSwitch(VDrawContext ctx, EfCanvas.Palette p, int y, int right, boolean on) {
+        EndfieldWidgets.paintSwitch(ctx, p, y, ROW_H, right, on);
     }
 
     /**
@@ -1541,7 +1334,7 @@ public class ConfigPage extends GenericScreen {
      * 所以只画当前生效的那一对——四个字段全摆出来会让人以为都能调。
      */
     private void paintWidgetPos(
-            VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref, WidgetPos pos,
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref, WidgetPos pos,
             int mouseX, int mouseY) {
         boolean percent = pos.getType() == 0;
         String mode = percent ? "百分比" : "绝对";
@@ -1562,21 +1355,13 @@ public class ConfigPage extends GenericScreen {
             int width = Math.max(VALUE_W, Ef.textWidth(text) + 12);
             Rect slot = new Rect(sliderRight - width, rowY + FieldEditor.FIELD_TOP, width, FieldEditor.FIELD_H);
             paintPartName(ctx, p, rowY, slot.x() - 8, names[i]);
-            if (editor.isOpenFor(widgetPosKey(ref, i))) {
-                FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
-                continue;
-            }
-            boolean slotHot = mouseX >= slot.x() && mouseX < slot.x() + slot.w()
+            boolean editing = editor.isOpenFor(widgetPosKey(ref, i));
+            boolean slotHot = !editing && mouseX >= slot.x() && mouseX < slot.x() + slot.w()
                     && mouseY >= slot.y() && mouseY < slot.y() + slot.h();
-            if (slotHot) {
-                FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), false, true);
-            } else {
-                int lineY = slot.y() + slot.h() - 2;
-                for (int k = 0; k < slot.w(); k += 3) {
-                    Ef.fill(ctx, slot.x() + k, lineY, Math.min(2, slot.w() - k), 1, p.rule());
-                }
+            EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, slotHot);
+            if (!editing) {
+                Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), rowY + 5, p.ink());
             }
-            Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), rowY + 5, p.ink());
         }
     }
 
@@ -1586,7 +1371,7 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** GUI 设置：行里一个自绘入口块，点开本界面自己的详细页。 */
-    private void paintGuiSetting(VDrawContext ctx, Ef.Palette p, int y, int right) {
+    private void paintGuiSetting(VDrawContext ctx, EfCanvas.Palette p, int y, int right) {
         int width = Ef.textWidth(GUI_SETTING_CHIP) + 10;
         int x = right - width;
         Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), p.cut());
@@ -1594,23 +1379,8 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 计数块：一个「N 项 ▾」切角块，点开宿主的编辑屏。 */
-    private void paintCountChip(VDrawContext ctx, Ef.Palette p, int y, int right, String text) {
-        String label = text + "   ▾";
-        int width = Ef.textWidth(label) + 10;
-        int x = right - width;
-        Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), p.cut());
-        Ef.text(ctx, label, x + 5, y + 5, p.ink());
-    }
-
-    /** 有界开关表里打开了几项：只数开着的，与宿主编辑屏的语义一致。 */
-    private static int flagCount(BoundedPrimitiveFlagMap<?> flags) {
-        int count = 0;
-        for (Object value : flags.toMap().values()) {
-            if (Boolean.TRUE.equals(value)) {
-                count++;
-            }
-        }
-        return count;
+    private void paintCountChip(VDrawContext ctx, EfCanvas.Palette p, int y, int right, String text) {
+        EndfieldWidgets.paintCountChip(ctx, p, y, right, text, p.cut(), false);
     }
 
     /**
@@ -1620,7 +1390,7 @@ public class ConfigPage extends GenericScreen {
      * 所以不能走 {@link #componentNames}——那个读的是记录分量名，会画成「X LABEL」。
      */
     private void paintLabelVec(
-            VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref,
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref,
             String xLabel, String yLabel, String zLabel, double x, double y2, double z,
             int mouseX, int mouseY) {
         String[] labels = {xLabel, yLabel, zLabel};
@@ -1632,21 +1402,13 @@ public class ConfigPage extends GenericScreen {
             int width = Math.max(VALUE_W, Ef.textWidth(text) + 12);
             Rect slot = new Rect(right - width, partY + FieldEditor.FIELD_TOP, width, FieldEditor.FIELD_H);
             paintPartName(ctx, p, partY, slot.x() - 8, labelText(labels[i]));
-            if (editor.isOpenFor(labelVecKey(ref, i))) {
-                FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
-                continue;
-            }
-            boolean hot = mouseX >= slot.x() && mouseX < slot.x() + slot.w()
+            boolean editing = editor.isOpenFor(labelVecKey(ref, i));
+            boolean hot = !editing && mouseX >= slot.x() && mouseX < slot.x() + slot.w()
                     && mouseY >= slot.y() && mouseY < slot.y() + slot.h();
-            if (hot) {
-                FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), false, true);
-            } else {
-                int lineY = slot.y() + slot.h() - 2;
-                for (int k = 0; k < slot.w(); k += 3) {
-                    Ef.fill(ctx, slot.x() + k, lineY, Math.min(2, slot.w() - k), 1, p.rule());
-                }
+            EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, hot);
+            if (!editing) {
+                Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), partY + 5, p.ink());
             }
-            Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), partY + 5, p.ink());
         }
     }
 
@@ -1664,7 +1426,7 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 有限字符串候选：与枚举同一套下拉，值框显示当前项。 */
-    private void paintStringEnum(VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref, StringEnum choice) {
+    private void paintStringEnum(VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref, StringEnum choice) {
         String text = choice.value() + " ▾";
         int width = Ef.textWidth(text) + 10;
         int x = right - width;
@@ -1697,12 +1459,8 @@ public class ConfigPage extends GenericScreen {
      * <p>增删要遍历注册表、要按 id 反查条目，自绘一份等于重写宿主的 {@code RegistrySelectScreen}；
      * 这里只摆入口，编辑能力借宿主的——与模块配置页同一个思路。
      */
-    private void paintEntrySet(VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref, EntrySet<?> set) {
-        String label = set.set().size() + " 项   ▾";
-        int width = Ef.textWidth(label) + 10;
-        int x = right - width;
-        Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), Ef.CUT);
-        Ef.text(ctx, label, x + 5, y + 5, p.ink());
+    private void paintEntrySet(VDrawContext ctx, EfCanvas.Palette p, int y, int right, Ref<?> ref, EntrySet<?> set) {
+        EndfieldWidgets.paintCountChip(ctx, p, y, right, set.set().size() + " 项", Ef.CUT, false);
     }
 
     /**
@@ -1711,18 +1469,11 @@ public class ConfigPage extends GenericScreen {
      * <p>没启用时值区写一块「未启用」，留空会被当成坏掉的控件。
      * 内层可以是数值（就地编辑）或枚举（下拉），与模块配置页同一套画法。
      */
-    private void paintOptional(VDrawContext ctx, Ef.Palette p, int y, int right, Ref<?> ref) {
+    private void paintOptional(
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Item item, int mouseX, int mouseY) {
+        Ref<?> ref = item.ref();
         OptionalPrimitive<?> optional = (OptionalPrimitive<?>) ref.getValue();
-        int sw = 20;
-        int sh = 9;
-        int sy = y + (ROW_H - sh) / 2;
-        if (optional.isPresent()) {
-            Ef.fill(ctx, right - sw, sy, sw, sh, p.ink());
-            Ef.fill(ctx, right - 9, sy + 2, 5, 5, p.paper());
-        } else {
-            Ef.dashedOutline(ctx, right - sw, sy, sw, sh, p.ink2());
-            Ef.fill(ctx, right - sw + 2, sy + 2, 5, 5, p.ink2());
-        }
+        EndfieldWidgets.paintSwitch(ctx, p, y, ROW_H, right, optional.isPresent());
 
         int innerRight = right - 28;
         Object inner = optionalInner(ref);
@@ -1747,26 +1498,77 @@ public class ConfigPage extends GenericScreen {
             String text = formatNumber(numeric);
             int width = Math.max(VALUE_W, Ef.textWidth(text) + 12);
             Rect slot = new Rect(innerRight - width, y + FieldEditor.FIELD_TOP, width, FieldEditor.FIELD_H);
-            if (editor.isOpenFor(editorKey(ref, optionalKey(ref)))) {
-                FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
-                return;
+            boolean editing = editor.isOpenFor(editorKey(ref, optionalKey(ref)));
+            boolean hot = !editing && inRect(slot, mouseX, mouseY);
+            EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, hot);
+            if (!editing) {
+                Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), y + 5, p.ink());
             }
-            // 与普通值槽同一套静态态：一条虚线底边说明这一格能点开编辑
-            int lineY = slot.y() + slot.h() - 2;
-            for (int i = 0; i < slot.w(); i += 3) {
-                Ef.fill(ctx, slot.x() + i, lineY, Math.min(2, slot.w() - i), 1, p.rule());
+            return;
+        }
+        if (inner instanceof Boolean flag) {
+            paintSwitch(ctx, p, y, innerRight, flag);
+            return;
+        }
+        if (inner instanceof TextColor) {
+            EndfieldWidgets.paintColorRow(
+                    ctx, p, innerRight, y, ValueCodec.colorOf(optional), editor.isOpenFor(editorKey(item)), Ef.CUT);
+            return;
+        }
+        if (inner instanceof CharSequence text) {
+            Rect slot = optionalTextSlot(innerRight, y);
+            paintSimpleSlot(ctx, p, slot, editor.isOpenFor(editorKey(item)), text.toString(), mouseX, mouseY);
+            return;
+        }
+        Object[] parts = recordParts(inner);
+        if (parts != null) {
+            String on = "已启用";
+            int onW = Ef.textWidth(on) + 10;
+            Ef.cutFill(ctx, innerRight - onW, y + 3, onW, 12, p.chip(), p.cut());
+            Ef.text(ctx, on, innerRight - onW + 5, y + 5, p.ink2());
+            String[] names = componentNames(inner);
+            for (int i = 0; i < parts.length; i++) {
+                int partY = y + (i + 1) * ROW_H;
+                int partIdx = OPTIONAL_RECORD_BASE + i;
+                Object part = parts[i];
+                if (part instanceof Number number) {
+                    String text = formatNumber(number.doubleValue());
+                    Rect slot = new Rect(right - VALUE_W, partY + FieldEditor.FIELD_TOP, VALUE_W, FieldEditor.FIELD_H);
+                    boolean editing = editor.isOpenFor(recordKey(ref, partIdx));
+                    EndfieldWidgets.paintValueSlot(
+                            ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, !editing && inRect(slot, mouseX, mouseY));
+                    if (!editing) {
+                        Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), partY + 5, p.ink());
+                    }
+                } else if (part instanceof ConfigEnum configEnum) {
+                    String text = enumLabel(configEnum) + " ▾";
+                    int width = Ef.textWidth(text) + 10;
+                    boolean open = recordKey(ref, partIdx).equals(dropdownKey);
+                    Ef.cutFill(ctx, right - width, partY + 3, width, 12,
+                            open ? Ef.mix(p.chip(), p.ink(), 0.14F) : p.chip(), p.cut());
+                    Ef.text(ctx, text, right - width + 5, partY + 5, p.ink());
+                }
+                paintPartName(ctx, p, partY, right - VALUE_W - 12, names[i]);
             }
-            Ef.text(ctx, text, slot.x() + slot.w() - 6 - Ef.textWidth(text), y + 5, p.ink());
+            return;
+        }
+        boolean[] bools = booleanParts(inner);
+        if (bools != null) {
+            String on = "已启用";
+            int onW = Ef.textWidth(on) + 10;
+            Ef.cutFill(ctx, innerRight - onW, y + 3, onW, 12, p.chip(), p.cut());
+            Ef.text(ctx, on, innerRight - onW + 5, y + 5, p.ink2());
+            String[] names = componentNames(inner);
+            for (int i = 0; i < bools.length; i++) {
+                int partY = y + (i + 1) * ROW_H;
+                paintPartName(ctx, p, partY, right - 28, names[i]);
+                paintSwitch(ctx, p, partY, right, bools[i]);
+            }
         }
     }
 
-    /**
-     * 按键绑定：等待按键时整块换成强调色，其余时候是描边块。
-     *
-     * <p>等待态必须一眼看出来——这时按下的任何键都会被这一项吃掉，
-     * 没有提示的话用户会以为界面卡住了。
-     */
-    private void paintKeyBind(VDrawContext ctx, Ef.Palette p, int y, int right, KeyBindRef ref, Item item) {
+    /** 按键绑定：等待按键时整块换成强调色，其余时候是描边块。 */
+    private void paintKeyBind(VDrawContext ctx, EfCanvas.Palette p, int y, int right, KeyBindRef ref, Item item) {
         boolean listening = keyTarget != null && keyTarget.equals(item.path());
         String text = listening ? "按任意键…" : keyText(ref);
         int width = Ef.textWidth(text) + 12;
@@ -1789,16 +1591,141 @@ public class ConfigPage extends GenericScreen {
         return keys == null || keys.isEmpty() ? "未绑定" : keys;
     }
 
-    /** 颜色：切角块里一块色块加它的十六进制值，点开调色盘。 */
-    private void paintColor(VDrawContext ctx, Ef.Palette p, int y, int right, WrapColor color) {
-        int rgb = color == null || color.color() == null ? 0xFFFFFF : color.asRGB();
-        String hex = String.format(Locale.ROOT, "#%06X", rgb & 0xFFFFFF);
-        int hexW = Ef.textWidth("#RRGGBB") + 2;
-        int width = 2 + 12 + 5 + hexW + 3;
-        int x = right - width;
-        Ef.cutFill(ctx, x, y + 3, width, 12, p.chip(), Ef.CUT);
-        Ef.fill(ctx, x + 2, y + 3, 12, 12, 0xFF000000 | (rgb & 0xFFFFFF));
-        Ef.text(ctx, hex, x + 2 + 12 + 5, y + 5, p.ink());
+    /** 颜色：切角块里一块色块加它的十六进制值，色块开调色盘、十六进制开输入框。 */
+    private void paintColor(VDrawContext ctx, EfCanvas.Palette p, int y, int right, Item item, WrapColor color) {
+        int rgb = ValueCodec.colorOf(color);
+        EndfieldWidgets.paintColorRow(ctx, p, right, y, rgb, editor.isOpenFor(editorKey(item)), Ef.CUT);
+    }
+
+    /** RGBA 颜色：色块 + #RRGGBB + 右侧 A:0..255 不透明度槽。 */
+    private void paintRgba(
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Item item, WrapRGBA rgba,
+            int mouseX, int mouseY) {
+        EndfieldWidgets.RgbaGeometry geo = EndfieldWidgets.rgbaGeometry(right);
+        boolean editingAlpha = editor.isOpenFor(alphaKey(item.ref()));
+        boolean hotAlpha = !editingAlpha && mouseX >= geo.alphaFieldX()
+                && mouseX < geo.alphaFieldX() + geo.alphaFieldW()
+                && mouseY >= y + FieldEditor.FIELD_TOP && mouseY < y + FieldEditor.FIELD_TOP + FieldEditor.FIELD_H;
+        EndfieldWidgets.paintRgbaRow(
+                ctx, p, right, y, ValueCodec.colorOf(rgba), rgba.alpha(),
+                editor.isOpenFor(editorKey(item)), editingAlpha, hotAlpha, Ef.CUT);
+    }
+
+    /** 带候选值的字符串：左边值框手输，右端箭头展开注册候选下拉。 */
+    private void paintStringChoices(
+            VDrawContext ctx, EfCanvas.Palette p, int y, Item item, String current, int mouseX, int mouseY) {
+        Rect slot = valueSlot(item, y);
+        boolean editing = editor.isOpenFor(editorKey(item));
+        boolean open = choicesKey(item).equals(dropdownKey);
+        if (editing) {
+            EndfieldWidgets.paintFieldFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
+            return;
+        }
+        boolean hot = inRect(slot, mouseX, mouseY);
+        EndfieldWidgets.paintFieldFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), open, hot);
+        boolean blank = current == null || current.isEmpty();
+        String label = blank ? "空" : current;
+        String shown = Ef.ellipsis(label, slot.w() - FieldEditor.FIELD_PAD * 2 - ARROW_W);
+        Ef.text(ctx, shown, slot.x() + FieldEditor.FIELD_PAD, slot.y() + FieldEditor.FIELD_PAD,
+                blank ? p.ink2() : p.ink());
+        String arrow = "▾";
+        Ef.text(ctx, arrow, slot.x() + slot.w() - ARROW_W + (ARROW_W - Ef.textWidth(arrow)) / 2,
+                slot.y() + FieldEditor.FIELD_PAD, open ? p.ink() : p.ink2());
+    }
+
+    /** 物品模板：值框编辑 id，行尾按钮开宿主物品编辑器。 */
+    private void paintItemTemplate(
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Item item, ItemStackTemplate template,
+            int mouseX, int mouseY) {
+        int btnX = right - BTN;
+        Rect slot = trailingBtnSlot(right, y, 1);
+        paintSimpleSlot(ctx, p, slot, editor.isOpenFor(editorKey(item)), template.itemId().toString(), mouseX, mouseY);
+        boolean hot = mouseX >= btnX && mouseX < btnX + BTN && mouseY >= y + 2 && mouseY < y + 2 + BTN;
+        if (hot) {
+            Ef.cutFill(ctx, btnX, y + 2, BTN, BTN, p.chip(), Ef.CUT);
+            itemTemplateHover = true;
+        }
+        Ef.icon(ctx, HostControls.editorIcon(), btnX, y + 2, BTN, hot ? p.ink() : p.ink2());
+    }
+
+    /** 注册表正则：值框编辑正则原文，行尾按钮开实时匹配的注册表预览屏。 */
+    private void paintRegistryRegex(
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Item item, int mouseX, int mouseY) {
+        int btnX = right - BTN;
+        Rect slot = trailingBtnSlot(right, y, 1);
+        paintSimpleSlot(ctx, p, slot, editor.isOpenFor(editorKey(item)), editableTextOf(item.ref()), mouseX, mouseY);
+        boolean available = HostEditors.canPreviewRegistryRegex(item.ref().getValue());
+        boolean hot = mouseX >= btnX && mouseX < btnX + BTN && mouseY >= y + 2 && mouseY < y + 2 + BTN;
+        if (hot && available) {
+            Ef.cutFill(ctx, btnX, y + 2, BTN, BTN, p.chip(), Ef.CUT);
+        }
+        int fg = available ? (hot ? p.ink() : p.ink2()) : Ef.alpha(p.ink2(), 0.45F);
+        Ef.icon(ctx, HostControls.listTagIcon(), btnX, y + 2, BTN, fg);
+        if (hot) {
+            regexPreviewHover = available ? "预览匹配列表：按正则实时筛选注册表条目" : "需先进入世界才能预览该注册表";
+        }
+    }
+
+    /** 格式化串：值框 + 占位符说明图标 + 颜色代码百科图标。 */
+    private void paintStringFormat(
+            VDrawContext ctx, EfCanvas.Palette p, int y, int right, Item item, StringFormat format,
+            int mouseX, int mouseY) {
+        int cursor = right;
+        int editX = -1;
+        int argX = -1;
+        if (format.colorString()) {
+            editX = cursor - BTN;
+            cursor = editX - 2;
+        }
+        if (!format.formattingArgument().isEmpty()) {
+            argX = cursor - BTN;
+            cursor = argX - 2;
+        }
+        int tailCount = (editX >= 0 ? 1 : 0) + (argX >= 0 ? 1 : 0);
+        Rect slot = trailingBtnSlot(right, y, tailCount);
+        paintSimpleSlot(ctx, p, slot, editor.isOpenFor(editorKey(item)), format.formatString(), mouseX, mouseY);
+        if (argX >= 0) {
+            boolean hot = mouseX >= argX && mouseX < argX + BTN && mouseY >= y + 2 && mouseY < y + 2 + BTN;
+            if (hot) {
+                Ef.cutFill(ctx, argX, y + 2, BTN, BTN, p.chip(), Ef.CUT);
+                formatArgumentHover = format;
+            }
+            Ef.icon(ctx, HostControls.formattingIcon(), argX, y + 2, BTN, hot ? p.ink() : p.ink2());
+        }
+        if (editX >= 0) {
+            boolean hot = mouseX >= editX && mouseX < editX + BTN && mouseY >= y + 2 && mouseY < y + 2 + BTN;
+            if (hot) {
+                Ef.cutFill(ctx, editX, y + 2, BTN, BTN, p.chip(), Ef.CUT);
+                editorHover = format;
+            }
+            Ef.icon(ctx, HostControls.editorIcon(), editX, y + 2, BTN, hot ? p.ink() : p.ink2());
+        }
+    }
+
+    private void paintSimpleSlot(
+            VDrawContext ctx, EfCanvas.Palette p, Rect slot, boolean editing, String raw, int mouseX, int mouseY) {
+        boolean hot = !editing && inRect(slot, mouseX, mouseY);
+        EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, hot);
+        if (editing) {
+            return;
+        }
+        boolean blank = raw == null || raw.isEmpty();
+        String shown = Ef.ellipsis(blank ? "空" : raw, slot.w() - 8);
+        Ef.text(ctx, shown, slot.x() + slot.w() - 6 - Ef.textWidth(shown), slot.y() + 4, blank ? p.ink2() : p.ink());
+    }
+
+    private static boolean inRect(Rect rect, int mx, int my) {
+        return mx >= rect.x() && mx < rect.x() + rect.w() && my >= rect.y() && my < rect.y() + rect.h();
+    }
+
+    private void paintPalette(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
+        if (!(palettePanel.target() instanceof Item target) || target.ref() == null) {
+            return;
+        }
+        if (palettePanel.paint(ctx, p, winX, winY, winW, winH, ROW_H,
+                ValueCodec.colorOf(target.ref().getValue()), mouseX, mouseY)) {
+            hovered = null;
+        }
     }
 
     /**
@@ -1807,26 +1734,18 @@ public class ConfigPage extends GenericScreen {
      * <p>悬停补一圈 1px 的框——这一格能点开，是点之前就该看出来的事。
      * 值右对齐到槽内沿而不是行尾，框出现时字不会横向跳一格。
      */
-    private void paintValue(VDrawContext ctx, Ef.Palette p, Item item, int rowY, int mouseX, int mouseY) {
+    private void paintValue(VDrawContext ctx, EfCanvas.Palette p, Item item, int rowY, int mouseX, int mouseY) {
         Ref<?> ref = item.ref();
         Rect slot = valueSlot(item, rowY);
-        if (editor.isOpenFor(editorKey(item))) {
-            FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), true, false);
-            return;
-        }
-        boolean hot = mouseX >= slot.x()
+        boolean editing = editor.isOpenFor(editorKey(item));
+        boolean hot = !editing
+                && mouseX >= slot.x()
                 && mouseX < slot.x() + slot.w()
                 && mouseY >= slot.y()
                 && mouseY < slot.y() + slot.h();
-        if (hot) {
-            FieldEditor.paintFrame(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), false, true);
-        } else {
-            // 静态态只画一条虚线底边：不抢视线，又能看出这一格能点开编辑。
-            // 比行的分隔线高 1px 且断成短划，两条线不会并成一条；悬停与聚焦时都不画
-            int lineY = slot.y() + slot.h() - 2;
-            for (int i = 0; i < slot.w(); i += 3) {
-                Ef.fill(ctx, slot.x() + i, lineY, Math.min(2, slot.w() - i), 1, p.rule());
-            }
+        EndfieldWidgets.paintValueSlot(ctx, p, slot.x(), slot.y(), slot.w(), slot.h(), editing, hot);
+        if (editing) {
+            return;
         }
         boolean blank = false;
         String text;
@@ -1846,38 +1765,50 @@ public class ConfigPage extends GenericScreen {
      *
      * <p>画在帧之后：它是浮层，可以越过正文裁剪与页脚；指在面板上时不再顺带出底下那一行的说明。
      */
-    private void paintDropdown(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    private void paintDropdown(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
         Line line = lineOfKey(dropdownKey);
         if (line == null) {
-            // 行被筛掉或滚出视野：面板没有可贴的位置
             dropdownKey = null;
             dropdownPart = -1;
+            dropScroll = 0;
             return;
         }
-        int part = recordPartOf(line.item().ref(), dropdownKey);
-        List<String> labels = optionLabels(line.item().ref(), part);
+        int part = dropdownPartOf(line.item().ref(), dropdownKey);
+        List<String> labels = optionLabels(line.item(), part);
         if (labels.isEmpty()) {
             dropdownKey = null;
             dropdownPart = -1;
+            dropScroll = 0;
             return;
         }
+        int visible = Math.min(labels.size(), DROP_MAX_ROWS);
+        dropScroll = Math.max(0, Math.min(labels.size() - visible, dropScroll));
         Rect box = dropdownRect(line, labels.size());
         Ef.fill(ctx, box.x(), box.y(), box.w(), box.h(), p.panel());
         Ef.cutOutline(ctx, box.x(), box.y(), box.w(), box.h(), p.ink(), p.cut());
 
-        String current = currentOptionLabel(line.item().ref(), part);
-        for (int i = 0; i < labels.size(); i++) {
+        String current = currentOptionLabel(line.item(), part);
+        for (int i = 0; i < visible; i++) {
+            int index = dropScroll + i;
             int oy = box.y() + 2 + i * DROP_ROW_H;
             boolean hot = mouseX >= box.x() && mouseX <= box.x() + box.w() && mouseY >= oy && mouseY < oy + DROP_ROW_H;
-            boolean active = labels.get(i).equals(current);
+            boolean active = labels.get(index).equals(current);
             if (hot) {
                 Ef.fill(ctx, box.x() + 1, oy, box.w() - 2, DROP_ROW_H, Ef.mix(p.panel(), p.ink(), 0.08F));
             }
             if (active) {
                 Ef.fill(ctx, box.x() + 1, oy, 3, DROP_ROW_H, p.trace());
             }
-            Ef.text(ctx, Ef.ellipsis(labels.get(i), box.w() - 14), box.x() + 8, oy + 3,
+            Ef.text(ctx, Ef.ellipsis(labels.get(index), box.w() - 14), box.x() + 8, oy + 3,
                     active ? p.ink() : p.ink2());
+        }
+        if (labels.size() > visible) {
+            int trackX = box.x() + box.w() - 3;
+            int trackH = box.h() - 4;
+            Ef.fill(ctx, trackX, box.y() + 2, 2, trackH, Ef.mix(p.panel(), p.ink(), 0.12F));
+            int thumbH = Math.max(8, trackH * visible / labels.size());
+            int thumbY = box.y() + 2 + (trackH - thumbH) * dropScroll / Math.max(1, labels.size() - visible);
+            Ef.fill(ctx, trackX, thumbY, 2, thumbH, p.ink2());
         }
 
         if (mouseX >= box.x() && mouseX <= box.x() + box.w() && mouseY >= box.y() && mouseY <= box.y() + box.h()) {
@@ -1886,7 +1817,7 @@ public class ConfigPage extends GenericScreen {
     }
 
     /** 数值行两端的加减键：切角是"能按"的形状标记，悬停时补底色。 */
-    private void paintStep(VDrawContext ctx, Ef.Palette p, int x, int y, String glyph, int mouseX, int mouseY) {
+    private void paintStep(VDrawContext ctx, EfCanvas.Palette p, int x, int y, String glyph, int mouseX, int mouseY) {
         boolean hot = mouseX >= x && mouseX < x + BTN && mouseY >= y + 2 && mouseY < y + 2 + BTN;
         if (hot) {
             Ef.cutFill(ctx, x, y + 2, BTN, BTN, p.chip(), p.cut());
@@ -1895,31 +1826,47 @@ public class ConfigPage extends GenericScreen {
         Ef.text(ctx, glyph, x + 4, y + 4, hot ? p.ink() : p.ink2());
     }
 
-    private void paintFooter(VDrawContext ctx, Ef.Palette p) {
-        int y = winY + winH - FOOT_H;
-        Ef.fill(ctx, winX, y, winW, FOOT_H, p.panel());
-        Ef.rule(ctx, winX, y, winW, p.rule());
-
+    private void paintFooter(VDrawContext ctx, EfCanvas.Palette p) {
         String left = roots.size() + " 个配置  │  当前 " + all().size() + " 项设置";
         if (!query.trim().isEmpty()) {
             left = left + "  │  命中 " + shown().size() + " 项";
         }
-        Ef.text(ctx, left, winX + 8, y + 3, p.ink2());
-
-        String hint = "滚轮滚动  │  右键恢复默认";
-        Ef.text(ctx, hint, winX + winW - 8 - Ef.textWidth(hint), y + 3, p.ink2());
+        EndfieldWidgets.paintFooterBar(ctx, p, winX, winY, winW, winH, FOOT_H, left, "滚轮滚动  │  右键恢复默认");
     }
 
-    private void paintFrame(VDrawContext ctx, Ef.Palette p) {
-        int edge = p.ink();
-        Ef.fill(ctx, winX, winY, winW, 1, edge);
-        Ef.fill(ctx, winX, winY + winH - 1, winW, 1, edge);
-        Ef.fill(ctx, winX, winY, 1, winH, edge);
-        Ef.fill(ctx, winX + winW - 1, winY, 1, winH, edge);
+    private void paintFrame(VDrawContext ctx, EfCanvas.Palette p) {
+        EndfieldWidgets.paintWindowFrame(ctx, p, winX, winY, winW, winH);
     }
 
-    /** 悬停说明：显示完整路径——总表里同名项可能很多，路径才是它的身份。 */
-    private void paintTip(VDrawContext ctx, Ef.Palette p, int mouseX, int mouseY) {
+    /** 悬停说明：按钮说明优先，其次显示完整路径与恢复默认提示。 */
+    private void paintTip(VDrawContext ctx, EfCanvas.Palette p, int mouseX, int mouseY) {
+        if (formatArgumentHover != null) {
+            List<String> lines = new ArrayList<>();
+            for (Component tip : StringFormat.generateTooltipsForArgument(formatArgumentHover.formattingArgument())) {
+                lines.addAll(Ef.wrap(tip.getString(), 240));
+            }
+            formatArgumentHover = null;
+            Ef.tooltip(ctx, p, lines, mouseX, mouseY, this.width, this.height);
+            return;
+        }
+        if (itemTemplateHover) {
+            itemTemplateHover = false;
+            Ef.tooltip(ctx, p, List.of("打开物品编辑屏：附魔、名字、数量等组件在那里改"), mouseX, mouseY,
+                    this.width, this.height);
+            return;
+        }
+        if (regexPreviewHover != null) {
+            String tip = regexPreviewHover;
+            regexPreviewHover = null;
+            Ef.tooltip(ctx, p, List.of(tip), mouseX, mouseY, this.width, this.height);
+            return;
+        }
+        if (editorHover != null) {
+            List<Component> lines = editorHover.generateColorStringPreview();
+            editorHover = null;
+            Ef.tooltipStyled(ctx, p, lines, mouseX, mouseY, this.width, this.height);
+            return;
+        }
         if (hovered == null) {
             return;
         }
@@ -1948,8 +1895,17 @@ public class ConfigPage extends GenericScreen {
     }
 
     private static String editorKey(Ref<?> ref, String path) {
-        String kind = ref.getValue() instanceof WrapColor ? "color:" : (textEditable(ref) ? "text:" : "num:");
+        Object val = ref.getValue();
+        String kind = val instanceof WrapColor
+                        || val instanceof WrapRGBA
+                        || (val instanceof OptionalPrimitive<?> opt && opt.getValue() instanceof TextColor)
+                ? "color:"
+                : (textEditable(ref) ? "text:" : "num:");
         return kind + path;
+    }
+
+    private static String alphaKey(Ref<?> ref) {
+        return "alpha:" + System.identityHashCode(ref);
     }
 
     /** 可选值内层枚举的下拉身份。 */
@@ -1960,6 +1916,11 @@ public class ConfigPage extends GenericScreen {
     /** 枚举下拉的身份：芯片、候选与命中都认这一条路径。 */
     private static String enumKey(Item item) {
         return "enum:" + item.path();
+    }
+
+    /** 带候选字符串配置的下拉身份。 */
+    private static String choicesKey(Item item) {
+        return "choices:" + item.path();
     }
 
     /** 有限字符串候选的下拉身份：与枚举分开，两者候选来源不同。 */
@@ -2017,10 +1978,19 @@ public class ConfigPage extends GenericScreen {
             boolean picked = clickDropdown(mx, my, button);
             dropdownKey = null;
             dropdownPart = -1;
+            dropScroll = 0;
             if (picked) {
                 return true;
             }
             // 面板外的一击只关面板，不穿透到下面的控件；命令栏是例外，照旧切页
+            return my >= winY && my < winY + barH && clickTabBar(mx, my);
+        }
+        if (palettePanel.target() instanceof Item target && target.ref() != null) {
+            if (palettePanel.click(winX, winY, winW, winH, ROW_H, ValueCodec.colorOf(target.ref().getValue()),
+                    mx, my, button, rgb -> writePaletteColor(target.ref(), rgb))) {
+                return true;
+            }
+            palettePanel.close();
             return my >= winY && my < winY + barH && clickTabBar(mx, my);
         }
         if (my >= winY && my < winY + barH) {
@@ -2056,17 +2026,25 @@ public class ConfigPage extends GenericScreen {
         return null;
     }
 
-    /**
-     * 这一行的下拉身份是否就是 {@code key}。
-     *
-     * <p>三种身份：整值枚举（{@code enum:}）、有限字符串候选（{@code stringenum:}）、
-     * 记录里的某一格（{@code record:}）。少了最后一种，记录里的枚举点开就立刻被当成「行没了」清掉。
-     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void writePaletteColor(Ref<?> ref, int rgb) {
+        ((Ref) ref).setValue(ValueCodec.withRgb(ref.getValue(), rgb));
+    }
+
+    private static int dropdownPartOf(Ref<?> ref, String key) {
+        int part = recordPartOf(ref, key);
+        return part >= 0 ? part : -1;
+    }
+
+    /** 这一行的下拉身份是否就是 {@code key}。 */
     private static boolean dropdownKeyMatches(Item item, String key) {
         if (key == null) {
             return false;
         }
-        if (key.equals(enumKey(item)) || key.equals(enumKeyOf(item.ref()))) {
+        if (key.equals(enumKey(item))
+                || key.equals(choicesKey(item))
+                || key.equals(enumKeyOf(item.ref()))
+                || key.equals(optionalKey(item.ref()))) {
             return true;
         }
         return recordPartOf(item.ref(), key) >= 0;
@@ -2081,21 +2059,23 @@ public class ConfigPage extends GenericScreen {
         if (line == null) {
             return false;
         }
-        int part = recordPartOf(line.item().ref(), dropdownKey);
-        List<String> labels = optionLabels(line.item().ref(), part);
+        int part = dropdownPartOf(line.item().ref(), dropdownKey);
+        List<String> labels = optionLabels(line.item(), part);
         if (labels.isEmpty()) {
             return false;
         }
+        int visible = Math.min(labels.size(), DROP_MAX_ROWS);
         Rect box = dropdownRect(line, labels.size());
         if (mx < box.x() || mx > box.x() + box.w()) {
             return false;
         }
         int top = box.y() + 2;
-        int index = (my - top) / DROP_ROW_H;
-        if (my < top || index < 0 || index >= labels.size()) {
+        int row = (my - top) / DROP_ROW_H;
+        int index = dropScroll + row;
+        if (my < top || row < 0 || row >= visible || index < 0 || index >= labels.size()) {
             return false;
         }
-        selectOption(line.item().ref(), index, part);
+        selectOption(line.item(), index, part);
         return true;
     }
 
@@ -2111,11 +2091,7 @@ public class ConfigPage extends GenericScreen {
         if (hit == null || "Config".equals(hit)) {
             return false;
         }
-        GuiStyle style = GuiStyles.getOrDefault(NewClickGui.style());
-        Screen next = "Module".equals(hit) ? style.openMain(settings) : style.openPage(hit, settings);
-        if (next != null) {
-            ScreenAccess.of(this).switchToScreen(next);
-        }
+        GuiStyles.switchTab(this, hit, settings);
         return true;
     }
 
@@ -2167,14 +2143,13 @@ public class ConfigPage extends GenericScreen {
         boolean text = textEditable(ref);
         String seed;
         if (color) {
-            int rgb = ((WrapColor) ref.getValue()).asRGB();
-            seed = String.format(Locale.ROOT, "#%06X", rgb & 0xFFFFFF);
+            seed = ValueCodec.hexOf(ValueCodec.colorOf(ref.getValue()));
         } else if (text) {
             seed = editableTextOf(ref);
         } else {
             seed = valueText(ref);
         }
-        editor.open(this, editorKey(item), slot.x(), slot.y(), slot.w(), seed, !text, value -> {
+        editor.open(this, editorKey(item), slot.x(), slot.y(), slot.w(), seed, !text, text ? 1024 : 24, value -> {
             if (color) {
                 commitColor(ref, value);
             } else if (text) {
@@ -2193,80 +2168,25 @@ public class ConfigPage extends GenericScreen {
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void openEntrySet(Ref<?> ref, EntrySet<?> set) {
-        try {
-            // 裸类型接：registry 与 set 的通配捕获对不上，带 <> 推不出类型参数
-            ScreenAccess.of(new RegistrySelectScreen(
-                            set.registry(),
-                            set.set(),
-                            (java.util.function.Consumer<java.util.Set>) selected -> {
-                                if (selected != null) {
-                                    ((Ref) ref).setValue(new EntrySet(set.registry(), selected));
-                                }
-                            },
-                            NewClickGui.elementFactory()))
-                    .openFromCurrent();
-        } catch (Throwable e) {
-            me.matl114.utils.Debug.info("[SFH+] 名单选择屏打开失败: " + e);
-        }
+        HostEditors.openEntrySet(
+                set, next -> ((Ref) ref).setValue(next), NewClickGui.popupFactory(settings), "名单选择屏打开失败");
     }
 
     /**
-     * 打开宿主的列表 / 键值编辑屏。
+     * 打开宿主的列表 / 键值 / 有界表编辑屏。
      *
-     * <p>增删行要按元素类型重建，自绘一份等于重写宿主的编辑器；这里只借它的编辑能力。
-     * 写回要包一层转换：宿主编辑屏写回的是 {@code List} / {@code Map}，
-     * 而这一项存的是 {@code PrimitiveList} / {@code PrimitiveMap}，不转换会在 accept 时抛类型错。
+     * <p>具体类型包装与实时写回适配器统一收口在 {@link HostEditors}。
      */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private void openCountEditor(Ref<?> ref, String path) {
-        try {
-            AttrKeyValue<Object> source = (AttrKeyValue<Object>) (AttrKeyValue<?>) ref.createKeyValue(path);
-            Object raw = ref.getValue();
-            if (raw instanceof PrimitiveMap<?, ?> map) {
-                // 键值表：编辑器由 NBTType 自己生成，塞进一个独立屏
-                DrawableWidget editor = source.generateValueWidget(NewClickGui.elementFactory(), 0, 0, 300, 20);
-                if (editor != null) {
-                    ScreenAccess.of(new HostEditorScreen(editor, 300, 20)).openFromCurrent();
-                }
-                return;
-            }
-            if (raw instanceof PrimitiveList<?> list) {
-                NBTType<Object> elementType = (NBTType<Object>) list.elementType();
-                WrapperFactory<List<Object>, PrimitiveList<Object>> factory = WrapperFactory.of(
-                        next -> new PrimitiveList<>(elementType, next, list.defaultPrimitive()),
-                        PrimitiveList::list);
-                AttrKeyValue<List<Object>> converted = new WrapperAttrKeyValue<>(
-                        (AttrKeyValue<PrimitiveList<Object>>) (AttrKeyValue<?>) source, factory);
-                NBTTypes.openListModifyScreen(
-                        NewClickGui.elementFactory(), converted, elementType, list::createNewElement, 300, 20);
-                return;
-            }
-            if (raw instanceof RegexList regexList) {
-                WrapperFactory<List<java.util.regex.Pattern>, RegexList> factory =
-                        WrapperFactory.of(RegexList::new, RegexList::patterns);
-                AttrKeyValue<List<java.util.regex.Pattern>> converted =
-                        new WrapperAttrKeyValue<>((AttrKeyValue<RegexList>) (AttrKeyValue<?>) source, factory);
-                NBTTypes.openListModifyScreen(
-                        NewClickGui.elementFactory(), converted, NBTTypes.REGEX_TYPE,
-                        () -> java.util.regex.Pattern.compile(""), 300, 20);
-                return;
-            }
-            if (ref instanceof ListRef listRef) {
-                // ListRef 的 keyValue 是快照，写回只改那份拷贝；包一层把 accept 转回 setValue
-                WrapperFactory<List<String>, List<String>> factory = WrapperFactory.of(
-                        next -> {
-                            listRef.setValue(new ArrayList<>(next));
-                            return new ArrayList<>(next);
-                        },
-                        ArrayList::new);
-                AttrKeyValue<List<String>> live = new WrapperAttrKeyValue<>(
-                        (AttrKeyValue<List<String>>) (AttrKeyValue<?>) source, factory);
-                NBTTypes.openListModifyScreen(
-                        NewClickGui.elementFactory(), live, NBTTypes.STRING_TYPE, () -> "", 300, 20);
-            }
-        } catch (Throwable e) {
-            me.matl114.utils.Debug.info("[SFH+] 列表编辑器打开失败: " + e);
+        Object raw = ref.getValue();
+        if (raw instanceof PrimitiveMap<?, ?>
+                || raw instanceof PrimitivePairList<?, ?>
+                || raw instanceof EnumPrimitiveList<?, ?>
+                || raw instanceof BoundedPrimitiveMap<?, ?>) {
+            HostEditors.openValueWidgetScreen(ref, path, NewClickGui.popupFactory(settings), "列表或映射编辑器打开失败");
+            return;
         }
+        HostEditors.openListEditor(ref, path, NewClickGui.popupFactory(settings));
     }
 
     /** 物品模板与注册表条目的就地编辑：非即时模式，Enter 或点到别处才交一次。 */
@@ -2282,21 +2202,8 @@ public class ConfigPage extends GenericScreen {
      *
      * <p>解析不出来就不落配置：打到一半的 id 不该把这一项变成空气。
      */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private static void commitTextValue(Ref<?> ref, String text) {
-        String next = text.trim();
-        Object value = ref.getValue();
-        if (value instanceof ItemStackTemplate template) {
-            net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.tryParse(next);
-            if (id != null && net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id)) {
-                template.setType(id);
-                ((Ref) ref).setValue(template);
-            }
-            return;
-        }
-        if (value instanceof Holder<?>) {
-            Holder.parse(next).ifSuccess(parsed -> ((Ref) ref).setValue(parsed));
-        }
+        ValueCodec.commitText(ref, text);
     }
 
     /** 位置行的一击：行尾切 type，两行数值槽各管一格。 */
@@ -2395,41 +2302,10 @@ public class ConfigPage extends GenericScreen {
         });
     }
 
-    /**
-     * 打开实体类型集合的编辑屏。
-     *
-     * <p>这一项不是 {@code EntrySet}：它由「生成组 + 追加 + 排除」三段拼出来，
-     * 宿主的注册表选择屏只认一个扁平集合，套上去会把三段结构压平。
-     * 所以借它自己的编辑屏，写回时整份替换。
-     */
+    /** 打开实体类型集合编辑屏。 */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void openEntityTypeSet(Ref<?> ref, EntityTypeEntrySet set) {
-        try {
-            ScreenAccess.of(new me.matl114.gui.presets.choices.EntityTypeEntrySetScreen(
-                            set, next -> ((Ref) ref).setValue(next), NewClickGui.elementFactory()))
-                    .openFromCurrent();
-        } catch (Throwable e) {
-            me.matl114.utils.Debug.info("[SFH+] 实体集合编辑屏打开失败: " + e);
-        }
-    }
-
-    /**
-     * 打开有界开关表（HUD 元素、皮肤部件…）的编辑屏。
-     *
-     * <p>键是枚举、值是布尔，宿主按「键清单 + 值类型」生成一张表；
-     * 写回要包一层转换，否则它会把 {@code Map} 直接写回那个包装类型。
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private void openBoundedFlagMap(Ref<?> ref, BoundedPrimitiveFlagMap<?> flags) {
-        try {
-            AttrKeyValue<Object> source = (AttrKeyValue<Object>) (AttrKeyValue<?>) ref.createKeyValue("bounded");
-            DrawableWidget widget = source.generateValueWidget(NewClickGui.elementFactory(), 0, 0, 300, 20);
-            if (widget != null) {
-                ScreenAccess.of(new HostEditorScreen(widget, 300, 20)).openFromCurrent();
-            }
-        } catch (Throwable e) {
-            me.matl114.utils.Debug.info("[SFH+] 有界开关表编辑屏打开失败: " + e);
-        }
+        HostEditors.openEntityTypeSet(set, next -> ((Ref) ref).setValue(next), NewClickGui.popupFactory(settings));
     }
 
     /** 打开 GUI 设置的详细页：本界面自己的屏，不是宿主那一套。 */
@@ -2438,7 +2314,7 @@ public class ConfigPage extends GenericScreen {
         try {
             WrapperConfigRef<GuiSetting> target =
                     new WrapperConfigRef<>((Ref<GuiSetting>) ref, null, new String[] {"gui-setting"});
-            ScreenAccess.of(new GuiSettingPage(target, settings)).openFromCurrent();
+            HostScreens.open(new GuiSettingPage(target, settings));
         } catch (Throwable e) {
             me.matl114.utils.Debug.info("[SFH+] GUI 设置页打开失败: " + e);
         }
@@ -2449,13 +2325,22 @@ public class ConfigPage extends GenericScreen {
     private void openRecordEditor(Ref<?> ref, int part, int rowY, double current) {
         editor.open(this, recordKey(ref, part), itemsRight() - VALUE_W,
                 rowY + part * ROW_H + FieldEditor.FIELD_TOP, VALUE_W, formatNumber(current), true, value -> {
-                    try {
-                        double next = Double.parseDouble(value.trim().replace(',', '.'));
-                        if (Double.isFinite(next)) {
-                            ((Ref) ref).setValue(withNumericPart(ref.getValue(), part, next));
-                        }
-                    } catch (NumberFormatException ignored) {
-                        // 半截输入不是错误，继续等下一个字
+                    Double next = ValueCodec.tryParseNumber(value);
+                    if (next != null) {
+                        ((Ref) ref).setValue(withNumericPart(ref.getValue(), part, next));
+                    }
+                });
+    }
+
+    /** 可选记录里某一格的数值编辑：几何与绘制共用同一份。 */
+    private void openOptionalRecordEditor(Ref<?> ref, int subIndex, int rowY, double current) {
+        int partIdx = OPTIONAL_RECORD_BASE + subIndex;
+        int partY = rowY + (subIndex + 1) * ROW_H;
+        editor.open(this, recordKey(ref, partIdx), itemsRight() - VALUE_W,
+                partY + FieldEditor.FIELD_TOP, VALUE_W, formatNumber(current), true, value -> {
+                    Double next = ValueCodec.tryParseNumber(value);
+                    if (next != null) {
+                        RecordFieldOps.writeOptionalRecordNumber(ref, subIndex, next);
                     }
                 });
     }
@@ -2464,15 +2349,46 @@ public class ConfigPage extends GenericScreen {
     private void openOptionalEditor(Ref<?> ref, int rowY, int x, int w, double current) {
         editor.open(this, editorKey(ref, optionalKey(ref)), x, rowY + FieldEditor.FIELD_TOP, w,
                 formatNumber(current), true, value -> {
-                    try {
-                        double next = Double.parseDouble(value.trim().replace(',', '.'));
-                        if (Double.isFinite(next)) {
-                            writeOptionalNumber(ref, next);
-                        }
-                    } catch (NumberFormatException ignored) {
-                        // 半截输入不是错误，继续等下一个字
+                    Double next = ValueCodec.tryParseNumber(value);
+                    if (next != null) {
+                        writeOptionalNumber(ref, next);
                     }
                 });
+    }
+
+    /** RGB / RGBA / 可选颜色共用的色块与十六进制点击命中。 */
+    private boolean hitColorBox(Item item, int anchorRight, int mx, int my, int button, int rowY) {
+        if (button != 0 || my < rowY + FieldEditor.FIELD_TOP || my >= rowY + FieldEditor.FIELD_TOP + FieldEditor.FIELD_H) {
+            return false;
+        }
+        Ref<?> ref = item.ref();
+        EndfieldWidgets.ColorGeometry box = EndfieldWidgets.colorGeometry(anchorRight);
+        if (mx >= box.chipX() && mx < box.chipX() + box.swatchHitW()) {
+            palettePanel.open(item, box.swatchX(), box.swatchW(), rowY);
+            return true;
+        }
+        if (mx >= box.hexFieldX() && mx < box.hexFieldX() + box.hexFieldW()) {
+            palettePanel.close();
+            editor.open(this, editorKey(item), box.hexFieldX(), rowY + FieldEditor.FIELD_TOP, box.hexFieldW(),
+                    ValueCodec.hexOf(ValueCodec.colorOf(ref.getValue())), true, 16, text -> commitColor(ref, text));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean hitRgba(Item item, WrapRGBA rgba, int right, int mx, int my, int button, int rowY) {
+        if (button != 0 || my < rowY + FieldEditor.FIELD_TOP || my >= rowY + FieldEditor.FIELD_TOP + FieldEditor.FIELD_H) {
+            return false;
+        }
+        EndfieldWidgets.RgbaGeometry geo = EndfieldWidgets.rgbaGeometry(right);
+        if (mx >= geo.alphaFieldX() && mx < geo.alphaFieldX() + geo.alphaFieldW()) {
+            palettePanel.close();
+            editor.open(this, alphaKey(item.ref()), geo.alphaFieldX(), rowY + FieldEditor.FIELD_TOP,
+                    geo.alphaFieldW(), Integer.toString(rgba.alpha()), true, 8,
+                    text -> commitAlpha(item.ref(), text));
+            return true;
+        }
+        return hitColorBox(item, geo.alphaFieldX() - 4, mx, my, button, rowY);
     }
 
     private boolean apply(Item item, int rowY, int mx, int my, int button) {
@@ -2587,14 +2503,85 @@ public class ConfigPage extends GenericScreen {
             }
             return false;
         }
-        if (ref.getValue() instanceof BoundedPrimitiveFlagMap<?> flags) {
+        if (ref.getValue() instanceof ItemStackTemplate template) {
             if (button != 0) {
                 return false;
             }
-            String label = flagCount(flags) + " 项   ▾";
-            int width = Ef.textWidth(label) + 10;
-            if (mx >= right - width && mx <= right && my >= rowY + 3 && my < rowY + 15) {
-                openBoundedFlagMap(ref, flags);
+            int btnX = right - BTN;
+            if (mx >= btnX && mx < btnX + BTN && my >= rowY + 2 && my < rowY + 2 + BTN) {
+                HostEditors.openItemStackEditor(template.itemStack(), edited -> {
+                    template.setItemStack(edited);
+                    ((Ref) ref).setValue(template);
+                });
+                return true;
+            }
+            Rect slot = trailingBtnSlot(right, rowY, 1);
+            if (inRect(slot, mx, my)) {
+                editor.open(this, editorKey(item), slot.x(), slot.y(), slot.w(),
+                        template.itemId().toString(), false, 1024, text -> commitTextValue(ref, text));
+                return true;
+            }
+            return false;
+        }
+        if (ref.getValue() instanceof RegistryRegex<?> || ref.getValue() instanceof WeakRegistryRegex<?>) {
+            if (button != 0) {
+                return false;
+            }
+            int btnX = right - BTN;
+            if (mx >= btnX && mx < btnX + BTN && my >= rowY + 2 && my < rowY + 2 + BTN) {
+                HostEditors.openRegistryRegexPreview(ref, item.path(), NewClickGui.popupFactory(settings));
+                return true;
+            }
+            Rect slot = trailingBtnSlot(right, rowY, 1);
+            if (inRect(slot, mx, my)) {
+                editor.open(this, editorKey(item), slot.x(), slot.y(), slot.w(),
+                        editableTextOf(ref), false, 1024, text -> commitTextValue(ref, text));
+                return true;
+            }
+            return false;
+        }
+        if (ref.getValue() instanceof StringFormat format) {
+            if (button != 0) {
+                return false;
+            }
+            int cursor = right;
+            int editX = -1;
+            int argX = -1;
+            if (format.colorString()) {
+                editX = cursor - BTN;
+                cursor = editX - 2;
+            }
+            if (!format.formattingArgument().isEmpty()) {
+                argX = cursor - BTN;
+            }
+            if (argX >= 0 && mx >= argX && mx < argX + BTN && my >= rowY + 2 && my < rowY + 2 + BTN) {
+                return true;
+            }
+            if (editX >= 0 && mx >= editX && mx < editX + BTN && my >= rowY + 2 && my < rowY + 2 + BTN) {
+                HostEditors.openFormattingWiki();
+                return true;
+            }
+            int tailCount = (editX >= 0 ? 1 : 0) + (argX >= 0 ? 1 : 0);
+            Rect slot = trailingBtnSlot(right, rowY, tailCount);
+            if (inRect(slot, mx, my)) {
+                editor.open(this, editorKey(item), slot.x(), slot.y(), slot.w(),
+                        format.formatString(), false, 1024, text -> commitText(ref, text));
+                return true;
+            }
+            return false;
+        }
+        if (ref instanceof StringRef && !StringChoicesRegistry.ofPath(item.path()).isEmpty()) {
+            if (button != 0) {
+                return false;
+            }
+            Rect slot = valueSlot(item, rowY);
+            if (inRect(slot, mx, my)) {
+                if (mx >= slot.x() + slot.w() - ARROW_W) {
+                    dropdownKey = choicesKey(item);
+                    dropScroll = 0;
+                } else {
+                    openEditor(item, rowY);
+                }
                 return true;
             }
             return false;
@@ -2636,31 +2623,87 @@ public class ConfigPage extends GenericScreen {
             return false;
         }
         if (optionalRow(ref)) {
-            // 行尾开关：只切「这一项是否生效」，不碰内层值
-            if (mx >= right - 22 && mx <= right + 2) {
-                OptionalPrimitive<?> optional = (OptionalPrimitive<?>) ref.getValue();
-                setOptionalPresent(ref, !optional.isPresent());
-                return true;
-            }
+            OptionalPrimitive<?> optional = (OptionalPrimitive<?>) ref.getValue();
             Object inner = optionalInner(ref);
+            if (my < rowY + ROW_H) {
+                // 行尾开关：只切「这一项是否生效」，不碰内层值
+                if (mx >= right - 22 && mx <= right + 2) {
+                    setOptionalPresent(ref, !optional.isPresent());
+                    return true;
+                }
+                if (inner == null) {
+                    return false;
+                }
+                int innerRight = right - 28;
+                if (inner instanceof ConfigEnum) {
+                    String text = enumLabel((ConfigEnum) inner) + " ▾";
+                    int width = Ef.textWidth(text) + 10;
+                    if (mx >= innerRight - width && mx <= innerRight && my >= rowY + 3 && my < rowY + 15) {
+                        dropdownKey = optionalKey(ref);
+                        dropScroll = 0;
+                        return true;
+                    }
+                    return false;
+                }
+                if (inner instanceof Number number) {
+                    String text = formatNumber(number.doubleValue());
+                    int width = Math.max(VALUE_W, Ef.textWidth(text) + 12);
+                    if (mx >= innerRight - width && mx < innerRight && my >= rowY + 3 && my < rowY + 15) {
+                        openOptionalEditor(ref, rowY, innerRight - width, width, number.doubleValue());
+                        return true;
+                    }
+                    return false;
+                }
+                if (inner instanceof Boolean flag) {
+                    if (button == 0 && mx >= innerRight - 24 && mx <= innerRight) {
+                        RecordFieldOps.writeOptionalBoolean(ref, !flag);
+                        return true;
+                    }
+                    return false;
+                }
+                if (inner instanceof TextColor) {
+                    return hitColorBox(item, innerRight, mx, my, button, rowY);
+                }
+                if (inner instanceof CharSequence text) {
+                    Rect slot = optionalTextSlot(innerRight, rowY);
+                    if (button == 0 && inRect(slot, mx, my)) {
+                        editor.open(this, editorKey(item), slot.x(), slot.y(), slot.w(),
+                                text.toString(), false, 1024,
+                                draft -> RecordFieldOps.writeOptionalString(ref, draft.trim()));
+                        return true;
+                    }
+                    return false;
+                }
+                return false;
+            }
             if (inner == null) {
                 return false;
             }
-            int innerRight = right - 28;
-            if (inner instanceof ConfigEnum) {
-                String text = enumLabel((ConfigEnum) inner) + " ▾";
-                int width = Ef.textWidth(text) + 10;
-                if (mx >= innerRight - width && mx <= innerRight && my >= rowY + 3 && my < rowY + 15) {
-                    dropdownKey = optionalKey(ref);
+            int subIndex = (my - rowY - ROW_H) / ROW_H;
+            Object[] optParts = recordParts(inner);
+            if (optParts != null && subIndex >= 0 && subIndex < optParts.length) {
+                int partY = rowY + (subIndex + 1) * ROW_H;
+                Object subPart = optParts[subIndex];
+                if (subPart instanceof Number number) {
+                    if (button == 0 && mx >= right - VALUE_W && mx <= right && my >= partY + 3 && my < partY + 15) {
+                        openOptionalRecordEditor(ref, subIndex, rowY, number.doubleValue());
+                        return true;
+                    }
+                    return false;
+                }
+                if (subPart instanceof ConfigEnum && button == 0) {
+                    int partIdx = OPTIONAL_RECORD_BASE + subIndex;
+                    dropdownKey = recordKey(ref, partIdx);
+                    dropdownPart = partIdx;
+                    dropScroll = 0;
                     return true;
                 }
                 return false;
             }
-            if (inner instanceof Number number) {
-                String text = formatNumber(number.doubleValue());
-                int width = Math.max(VALUE_W, Ef.textWidth(text) + 12);
-                if (mx >= innerRight - width && mx < innerRight && my >= rowY + 3 && my < rowY + 15) {
-                    openOptionalEditor(ref, rowY, innerRight - width, width, number.doubleValue());
+            boolean[] optBools = booleanParts(inner);
+            if (optBools != null && subIndex >= 0 && subIndex < optBools.length) {
+                if (button == 0 && mx >= right - 24 && mx <= right) {
+                    RecordFieldOps.writeOptionalRecordPart(ref, subIndex, !optBools[subIndex]);
                     return true;
                 }
             }
@@ -2677,11 +2720,10 @@ public class ConfigPage extends GenericScreen {
             return false;
         }
         if (ref.getValue() instanceof WrapColor) {
-            if (inValueSlot(item, rowY, mx, my)) {
-                openEditor(item, rowY);
-                return true;
-            }
-            return false;
+            return hitColorBox(item, right, mx, my, button, rowY);
+        }
+        if (ref.getValue() instanceof WrapRGBA rgba) {
+            return hitRgba(item, rgba, right, mx, my, button, rowY);
         }
         if (textEditable(ref)) {
             if (inValueSlot(item, rowY, mx, my)) {
@@ -2694,6 +2736,19 @@ public class ConfigPage extends GenericScreen {
     }
 
     private boolean wheel(EfWidget self, double mouseX, double mouseY, double amount) {
+        if (dropdownKey != null) {
+            Line line = lineOfKey(dropdownKey);
+            if (line != null) {
+                int part = dropdownPartOf(line.item().ref(), dropdownKey);
+                List<String> labels = optionLabels(line.item(), part);
+                int visible = Math.min(labels.size(), DROP_MAX_ROWS);
+                if (labels.size() > visible) {
+                    int step = (int) Math.signum(amount);
+                    dropScroll = Math.max(0, Math.min(labels.size() - visible, dropScroll - step));
+                    return true;
+                }
+            }
+        }
         int my = (int) mouseY;
         if (my < bodyTop() || my >= bodyBottom()) {
             return false;
@@ -2702,6 +2757,8 @@ public class ConfigPage extends GenericScreen {
         editor.close();
         dropdownKey = null;
         dropdownPart = -1;
+        dropScroll = 0;
+        palettePanel.close();
         buildLines();
         int step = (int) (Math.signum(amount) * 18.0D);
         if (mouseX >= winX && mouseX < winX + railW) {
