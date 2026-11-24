@@ -12,7 +12,7 @@ import me.matl114.gui.basic.ExecutableWidget;
 import me.matl114.gui.basic.TextAlign;
 import me.matl114.gui.basic.TextProvider;
 import me.matl114.gui.basic.TooltipHandler;
-import me.matl114.gui.complex.BoxElement;
+import me.matl114.gui.elements.BoxElement;
 import me.matl114.gui.elements.SelectBackgroundElement;
 import me.matl114.gui.elements.SlidingInputElement;
 import me.matl114.gui.elements.TextFieldElement;

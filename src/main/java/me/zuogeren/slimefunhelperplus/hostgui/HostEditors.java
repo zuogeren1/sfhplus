@@ -33,7 +33,7 @@ import me.matl114.hacks.utils.config.RegexList;
 import me.matl114.hacks.utils.config.RegistryRegex;
 import me.matl114.hacks.utils.config.StringFormat;
 import me.matl114.hacks.utils.config.WeakRegistryRegex;
-import me.matl114.hacks.utils.gui.ClassicClickGuiScreen;
+import me.matl114.hacks.utils.clickgui.ClassicClickGuiScreen;
 import me.matl114.managers.config.ListRef;
 import me.matl114.managers.config.NBTType;
 import me.matl114.managers.config.Ref;

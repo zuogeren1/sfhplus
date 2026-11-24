@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Locale;
 import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.gui.GenericScreen;
-import me.matl114.utils.ClientUtils;
+import me.matl114.hacks.utils.ClientUtils;
 import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.custommodel.CustomModelManager;
 import me.zuogeren.slimefunhelperplus.module.custommodel.ModelCatalog;

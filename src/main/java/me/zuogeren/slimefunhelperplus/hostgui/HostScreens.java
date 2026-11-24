@@ -1,7 +1,7 @@
 package me.zuogeren.slimefunhelperplus.hostgui;
 
 import me.matl114.accessors.gui.ScreenAccess;
-import me.matl114.utils.ClientUtils;
+import me.matl114.hacks.utils.ClientUtils;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;

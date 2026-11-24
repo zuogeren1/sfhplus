@@ -1,7 +1,7 @@
 package me.zuogeren.slimefunhelperplus.mixin;
 
 import me.matl114.hacks.modules.task.ClickGui;
-import me.matl114.utils.ClientUtils;
+import me.matl114.hacks.utils.ClientUtils;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import org.spongepowered.asm.mixin.Mixin;

@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import me.zuogeren.slimefunhelperplus.hostgui.HostScreens;
 import me.matl114.gui.GenericScreen;
-import me.matl114.utils.ClientUtils;
+import me.matl114.hacks.utils.ClientUtils;
 import me.zuogeren.slimefunhelperplus.hostgui.HostControls;
 import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.custommodel.CustomModelManager;
