@@ -28,3 +28,6 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# AI agent 规则（本地文件，不进版本库）
+AGENTS.md
