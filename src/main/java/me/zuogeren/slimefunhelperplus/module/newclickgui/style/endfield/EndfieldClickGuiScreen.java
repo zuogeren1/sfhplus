@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import me.matl114.gui.GenericScreen;
 import me.matl114.gui.basic.DrawableWidget;
@@ -226,9 +227,9 @@ public class EndfieldClickGuiScreen extends GenericScreen {
         return prefix + module.getName() + suffix;
     }
 
-    private Map<String, Function<Screen, DrawableWidget>> extras;
+    private Map<String, BiFunction<Integer, Integer, DrawableWidget>> extras;
 
-    private Map<String, Function<Screen, DrawableWidget>> extraSelections() {
+    private Map<String, BiFunction<Integer, Integer, DrawableWidget>> extraSelections() {
         if (extras == null) {
             ClickGui clickGui = ClickGui.INSTANCE;
             extras = clickGui == null
@@ -245,7 +246,7 @@ public class EndfieldClickGuiScreen extends GenericScreen {
             HostScreens.open(ours);
             return;
         }
-        Function<Screen, DrawableWidget> page = extraSelections().get(key);
+        BiFunction<Integer, Integer, DrawableWidget> page = extraSelections().get(key);
         HostEditors.openClassicPage(key, page, NewClickGui.popupFactory(settings));
     }
 

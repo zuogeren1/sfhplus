@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -345,11 +346,11 @@ public final class HostEditors {
 
     /** 回退打开宿主单一分类页（尚未有新风格专页的顶部分类走此兜底）。 */
     public static void openClassicPage(
-            String key, Function<Screen, DrawableWidget> page, ElementFactory factory) {
+            String key, BiFunction<Integer, Integer, DrawableWidget> page, ElementFactory factory) {
         if (page == null) {
             return;
         }
-        Map<String, Function<Screen, DrawableWidget>> one = new LinkedHashMap<>();
+        Map<String, BiFunction<Integer, Integer, DrawableWidget>> one = new LinkedHashMap<>();
         one.put(key, page);
         HostScreens.open(new ClassicClickGuiScreen(one, factory));
     }
