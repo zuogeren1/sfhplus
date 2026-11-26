@@ -162,7 +162,7 @@ public class ConfluxMapHelper extends BaseModule {
     public final FlagRef addChatInGuiMap = flagBuilder(root.add("add-chat-input-in-gui-map")).build();
 
     /**
-     * 捕获宿主四个模块（StructureLabel / SearchLabel / EntityLog / Warps）提交的 Xaero 路径点。
+     * 捕获宿主各点源模块（StructureLabel / SearchLabel / FeatureLabel / EntityLog / Warps）提交的 Xaero 路径点。
      *
      * <p>这一版<b>只写日志不渲染</b>：它要回答的是「这套点能不能拿来用」——有多少、什么坐标、
      * 什么颜色、什么时候被删。实现见 {@link WaypointCaptureProbe}（反射替换 {@code XaeroHooks#minimap}，

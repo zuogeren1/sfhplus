@@ -22,14 +22,14 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 
 /**
- * Xaero 路径点流量的只读捕获器：验证「宿主的 StructureLabel / SearchLabel / EntityLog / Warps
+ * Xaero 路径点流量的只读捕获器：验证「宿主的 StructureLabel / SearchLabel / FeatureLabel / EntityLog / Warps
  * 提交的点，能不能原样拿来做 conflux 的标记」。
  *
- * <p><b>为什么是反射而不是 mixin</b>：这四个模块都通过 {@link IXWaypointFactory} 出厂、
+ * <p><b>为什么是反射而不是 mixin</b>：这些模块都通过 {@link IXWaypointFactory} 出厂、
  * 经 {@link IXWaypointAccess} 挂到当前世界。只要把 {@code XaeroHooks#minimap} 换成一个
  * 「永远说自己启用、工厂返回我们自己的实现」的桩，宿主那一整套
  * {@code XaeroHelper.createWaypoint / submitWaypoint / updateWaypoint / removeWaypoint / removeSub}
- * 就会原封不动跑到我们这里 —— 宿主零改动，四个模块一次全覆盖。
+ * 就会原封不动跑到我们这里 —— 宿主零改动，五类点源一次全覆盖。
  *
  * <p><b>只捕获、不渲染</b>：这一版只往日志里写数字与样本，用来回答三个问题：
  * 点有多少、长什么样（名字/坐标/颜色/是否临时）、什么时候被删。渲染是下一步的事，
@@ -313,7 +313,7 @@ public final class WaypointCaptureProbe {
                 + " hostBindings=" + hostBindings + " modules=" + moduleStates();
     }
 
-    /** 四个点源模块自己的开关状态 */
+    /** 各点源模块自己的开关状态 */
     private static String moduleStates() {
         StringBuilder text = new StringBuilder("{");
         for (int i = 0; i < MODULE_HANDLES.length; ++i) {
@@ -339,10 +339,11 @@ public final class WaypointCaptureProbe {
         }
     }
 
-    /** 四个点源模块的持有位置：{@code 类名, 静态字段, 展示名} */
+    /** 各点源模块的持有位置：{@code 类名, 静态字段, 展示名} */
     private static final String[][] MODULE_HANDLES = {
         {"me.matl114.hacks.SurvivalTasks", "structureLabel", "StructureLabel"},
         {"me.matl114.hacks.SurvivalTasks", "searchLabel", "SearchLabel"},
+        {"me.matl114.hacks.SurvivalTasks", "featureLabel", "FeatureLabel"},
         {"me.matl114.hacks.RenderTasks", "entityLog", "EntityLog"},
         {"me.matl114.hacks.ExtraTasks", "warps", "Warps"},
     };
@@ -366,7 +367,7 @@ public final class WaypointCaptureProbe {
      *
      * <p>为什么靠名字而不是 owner：{@code IXWaypointAccess#add} 拿不到 owner ——
      * owner 只存在于宿主的 {@code submittedWaypoints} 私有列表里，而本路径刻意不 mixin 宿主。
-     * 四个模块的命名恰好互不重叠（{@code $} 前缀 / {@code [SFH] ...} / {@code Label:} / 结构名），
+     * 各模块的命名恰好互不重叠（{@code $} 前缀 / {@code [SFH] ...} / {@code Label:} / 结构名 / {@code Dungeon}），
      * 所以这条推断在验证阶段足够准；等真渲染时再换成宿主侧的显式归属。
      *
      * <p>未知前缀统一记 {@code other}：出现了就说明有我们没预料到的点源，值得单独看一眼。
@@ -393,6 +394,9 @@ public final class WaypointCaptureProbe {
         if (name.startsWith("Label:")) {
             return "SearchLabel";
         }
+        if (name.startsWith("Dungeon")) {
+            return "FeatureLabel/Dungeon";
+        }
         if (name.startsWith("Ancient City")) {
             return "StructureLabel/AC";
         }
@@ -414,9 +418,10 @@ public final class WaypointCaptureProbe {
     /**
      * 这个来源提交前是否乘过 {@code coordinateScale}。
      *
-     * <p>依据是四个模块的现有写法：StructureLabel（{@code createWaypointSpec}）、SearchLabel
+     * <p>依据是各模块的现有写法：StructureLabel（{@code createWaypointSpec}）、SearchLabel
      * （{@code createWaypoint}）、Warps（{@code addCurrentWaypoint}）都乘了
-     * {@code dimensionType().coordinateScale()}；EntityLog 与 XaeroHelper 的旅行点没有乘。
+     * {@code dimensionType().coordinateScale()}；EntityLog、XaeroHelper 的旅行点，
+     * 以及 FeatureLabel（{@code createWaypointSpec}，直接写方块坐标）都没有乘。
      * 未知来源按「没乘」处理 —— 除错一次会同时错掉位置和后续的跨维度换算，宁可不除。
      */
     static boolean isPreScaled(String name) {
@@ -699,7 +704,7 @@ public final class WaypointCaptureProbe {
         /**
          * 这个点在提交前有没有被宿主乘过 {@link #coordinateScale}。
          *
-         * <p>宿主四个来源口径不统一：StructureLabel / SearchLabel / Warps 会乘
+         * <p>宿主各来源口径不统一：StructureLabel / SearchLabel / Warps 会乘
          * {@code dimensionType().coordinateScale()}（沿用 Xaero 的「主世界尺度」写法），
          * EntityLog 与 XaeroHelper 的旅行点则是原始坐标。conflux 要的是**该维度的原始坐标**，
          * 所以只有乘过的那批要在渲染前除回去 —— 判断在建点时就做掉，别等到渲染时猜。
