@@ -6,7 +6,8 @@
 	"mixins": [],
 	"client": [
 		"ClickGuiTakeoverMixin",
-		"AttrKeyValueDropdownMixin"
+		"AttrKeyValueDropdownMixin",
+		"InputConstantsKeyGuardMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
