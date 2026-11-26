@@ -395,7 +395,9 @@ public abstract class ConfluxMapScreenMixin implements ConfluxMenuRowHost {
         try {
             int rows = this.slimefunhelper$extraRowsShown;
             FullscreenMapLocationMenu.Bounds bounds = slimefunhelper$bounds();
-            if (rows <= 0 || bounds == null || event == null || event.button() != 0) {
+            // MC 26.3 切到 SDL 后左键是 1（26.1/26.2 GLFW 为 0），统一读 InputConstants.MOUSE_BUTTON_LEFT
+            if (rows <= 0 || bounds == null || event == null
+                    || event.button() != com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT) {
                 return;
             }
             int index = slimefunhelper$locationMenuIndexAt(event.x(), event.y());

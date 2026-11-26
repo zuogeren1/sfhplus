@@ -61,8 +61,8 @@ public class ConfluxMenuOverlay {
     public static final int PANEL_BORDER = 0xFF9A9AA8;
     public static final int HOTKEY_COLOR = 0xFF55FF55;
 
-    /** GLFW 里数字 1 的键码（'1'），第 n 个数字键 = DIGIT_KEY_1 + n - 1 */
-    public static final int DIGIT_KEY_1 = 49;
+    /** 数字键 1 的键码（26.1/26.2 为 GLFW 49，26.3 为 SDL 30），第 n 个数字键 = DIGIT_KEY_1 + n - 1 */
+    public static final int DIGIT_KEY_1 = com.mojang.blaze3d.platform.InputConstants.KEY_1;
 
     /**
      * 我们的第 index 行该显示 / 该用哪个数字键。
