@@ -27,6 +27,7 @@ import me.matl114.versioned.api.VDrawContext;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.GuiStyles;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.ui.Settings;
+import me.zuogeren.slimefunhelperplus.module.settings.PluginModuleNames;
 import me.zuogeren.slimefunhelperplus.ui.EfCanvas;
 import me.zuogeren.slimefunhelperplus.ui.EfWidget;
 import net.minecraft.client.Minecraft;
@@ -188,8 +189,12 @@ public class EndfieldClickGuiScreen extends GenericScreen {
         return component == null ? "" : ChatUtils.textToPlainString(component);
     }
 
-    /** 模块显示名：沿用宿主的翻译键约定，但不经过 ClickGui 实例，换界面也能用。 */
+    /** 模块显示名：插件模块跟随 {@code Settings} 的语言设置，其余沿用宿主的翻译键约定。 */
     public static String moduleLabel(BaseModule module) {
+        String pluginName = PluginModuleNames.displayNameIfPlugin(module);
+        if (pluginName != null) {
+            return pluginName;
+        }
         String key = translationKey(module, "");
         return Component.translatableWithFallback(key, module.getName()).getString();
     }

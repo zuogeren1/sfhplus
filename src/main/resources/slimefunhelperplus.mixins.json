@@ -6,6 +6,10 @@
 	"mixins": [],
 	"client": [
 		"ClickGuiTakeoverMixin",
+		"ClickGuiModuleNameMixin",
+		"ModuleEntryDisplayMixin",
+		"ModuleSettingsToggleMessageMixin",
+		"SlimefunHelperCommandToggleMixin",
 		"AttrKeyValueDropdownMixin",
 		"InputConstantsKeyGuardMixin"
 	],

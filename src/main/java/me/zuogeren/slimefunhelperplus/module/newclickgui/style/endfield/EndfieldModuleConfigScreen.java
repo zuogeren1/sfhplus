@@ -911,8 +911,9 @@ public class EndfieldModuleConfigScreen extends GenericScreen {
         Ef.text(ctx, "< 返回", winX + 9, winY + 6, Ef.BAR_INK);
 
         int titleX = winX + 48;
-        Ef.text(ctx, title, titleX, winY + 6, Ef.BAR_INK);
-        Ef.trackedWide(ctx, latin, titleX + Ef.textWidth(title) + 8, winY + 7, Ef.BAR_INK2, 1, 1.2F);
+        String headerTitle = module != null ? EndfieldClickGuiScreen.moduleLabel(module) : title;
+        Ef.text(ctx, headerTitle, titleX, winY + 6, Ef.BAR_INK);
+        Ef.trackedWide(ctx, latin, titleX + Ef.textWidth(headerTitle) + 8, winY + 7, Ef.BAR_INK2, 1, 1.2F);
 
         if (module == null || module.getBindFlag() == null) {
             return;

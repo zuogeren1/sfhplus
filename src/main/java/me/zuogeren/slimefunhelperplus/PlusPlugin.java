@@ -13,6 +13,7 @@ import me.zuogeren.slimefunhelperplus.module.custommodel.CustomModelModule;
 import me.zuogeren.slimefunhelperplus.module.friendwine.FriendWine;
 import me.zuogeren.slimefunhelperplus.module.locator.LocatorTrackModule;
 import me.zuogeren.slimefunhelperplus.module.newclickgui.NewClickGui;
+import me.zuogeren.slimefunhelperplus.module.settings.PluginSettingsModule;
 import net.fabricmc.loader.api.ModContainer;
 
 /**
@@ -69,6 +70,8 @@ public class PlusPlugin implements SlimefunHelperPlugin {
         registerInto(context, "Render", FriendWine::new);
         // 新界面：壳子和配置都是插件自己的，但注册成模块才能在列表里看到 / 开关
         registerInto(context, "Tasks", NewClickGui::new);
+        // 插件统一设置：管理跨模块公共配置（如模块命名语言）
+        registerInto(context, "Tasks", PluginSettingsModule::new);
         // 聚合视图：重载后旧实例已被移除，过滤掉它们，否则这一列会显示一堆点不动的死模块
         context.modules()
                 .registerViewGroup(
