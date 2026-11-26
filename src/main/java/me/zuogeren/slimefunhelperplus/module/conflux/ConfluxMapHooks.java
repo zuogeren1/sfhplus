@@ -22,7 +22,7 @@ import net.minecraft.client.gui.screens.Screen;
  * 未安装 / 结构不符时一律降级为“不启用”，绝不抛异常。
  *
  * <h2>自检盯的是什么</h2>
- * 适配目标是 conflux <b>0.1.16</b>（26.1.2 / 26.2 / 26.3 都有产物）。0.1.16 把右键位置菜单的整块状态
+ * 适配目标是 conflux <b>0.1.16 ~ 0.1.18</b>（26.1.2 / 26.2 / 26.3 都有产物）。0.1.16 把右键位置菜单的整块状态
  * 从 {@code FullscreenMapScreen} 搬进了 {@code MapLocationMenuController}，小地图也拆成了几个 painter，
  * 所以「成员在不在、类型对不对」必须逐条核 —— 只按名字查是不够的：mixin 的注入按
  * 「名字 + 描述符」匹配，名字在、类型变了照样匹配不上，而 {@code @Shadow} 更是找不到就 apply 失败。
@@ -57,6 +57,12 @@ public class ConfluxMapHooks implements IHooks {
 
     private static final String MENU_CLASS = "cn.net.rms.confluxmap.mc.ui.screen.FullscreenMapLocationMenu";
 
+    /**
+     * 右键位置菜单命中的结构点（0.1.18 起 {@code locationMenuButtonSpecs} / {@code runLocationAction}
+     * 在 {@code Screen} 之前多带这一个参数）。它住在嵌套 {@code META-INF/jars/common-x.y.z.jar} 里。
+     */
+    private static final String STRUCTURE_MARKER_CLASS = "cn.net.rms.confluxmap.core.predict.StructureIndex$Marker";
+
     private static final String MINIMAP_RENDERER_CLASS = "cn.net.rms.confluxmap.mc.ui.hud.MinimapHudRenderer";
 
     private static final String MINIMAP_RADAR_CLASS = "cn.net.rms.confluxmap.mc.ui.hud.MinimapRadarPainter";
@@ -71,6 +77,9 @@ public class ConfluxMapHooks implements IHooks {
 
     boolean enable;
     String unsupportedReason;
+
+    /** 自检认下的 {@code locationMenuButtonSpecs} 参数个数：4 = 0.1.16，5 = 0.1.18+，0 = 没认出 */
+    int locationMenuSpecsParameterCount;
 
     @Getter
     @Broadcast
@@ -107,16 +116,13 @@ public class ConfluxMapHooks implements IHooks {
             requireField(controller, problems, "locationMenuTarget", MENU_CLASS + "$Target");
             requireMethod(controller, problems, "drawLocationMenu", "void", GUI_DRAW_CLASS);
             requireMethod(controller, problems, "dismissLocationMenu", "void");
-            // 0.1.16 的 addLocationMenuButtons() 读的是控制器自己的这一份，屏幕上的同名方法只是转发
-            requireMethod(
-                    controller,
-                    problems,
-                    "locationMenuButtonSpecs",
-                    "java.util.List",
-                    MENU_CLASS + "$Target",
-                    "cn.net.rms.confluxmap.core.waypoint.WaypointRenderEntry",
-                    "java.util.UUID",
-                    "boolean");
+            // addLocationMenuButtons() 读的是控制器自己的这一份，屏幕上的同名方法只是转发。
+            // 0.1.16 是 4 参，0.1.18 在 Screen 之前多插一个结构点参数 —— 两种都认。
+            locationMenuSpecsParameterCount = probeLocationMenuButtonSpecs(controller);
+            if (locationMenuSpecsParameterCount == 0) {
+                problems.add("method locationMenuButtonSpecs: expected 4 or 5 parameters returning java.util.List"
+                        + " (..., boolean[, StructureIndex$Marker]), actual <missing>");
+            }
 
             if (!problems.isEmpty()) {
                 unsupportedReason = "conflux-map structure changed: " + String.join("; ", problems);
@@ -127,6 +133,14 @@ public class ConfluxMapHooks implements IHooks {
                 return;
             }
             enable = true;
+            // 兼容状态写进日志：同一份插件 jar 要能跑 0.1.16 与 0.1.18，验收时按这行判断命中哪一种
+            Debug.getLogger()
+                    .info(
+                            "ConfluxMapHelper: conflux-map location menu accepted, locationMenuButtonSpecs has {} parameters ({})",
+                            locationMenuSpecsParameterCount,
+                            locationMenuSpecsParameterCount == 5
+                                    ? "0.1.18+: structure-aware"
+                                    : "0.1.16: no structure marker");
             String minimapProblem = probeMinimapOverlay();
             if (minimapProblem != null) {
                 // 小地图那两层是独立的一条链路（ConfluxMinimapHudMixin / ConfluxMinimapRadarMixin，都是
@@ -178,6 +192,48 @@ public class ConfluxMapHooks implements IHooks {
                 return;
             }
         }
+    }
+
+    /**
+     * 认下控制器上的 {@code locationMenuButtonSpecs}：两种参数表都算通过。
+     *
+     * <p>0.1.16 是 {@code (Target, WaypointRenderEntry, UUID, boolean)}；0.1.18 在 {@code Screen}
+     * 之前插入结构点，变成 {@code (..., boolean, StructureIndex$Marker)}。前 4 参逐条对上之后，
+     * 带第 5 参就必须是那个类型 —— 「名字还在、类型换了」照样算不兼容。
+     *
+     * @return 认下的参数个数（4 或 5）；认不出返回 0
+     */
+    private static int probeLocationMenuButtonSpecs(Class<?> controller) {
+        String[] head = {
+            MENU_CLASS + "$Target", "cn.net.rms.confluxmap.core.waypoint.WaypointRenderEntry", "java.util.UUID", "boolean"
+        };
+        int matched = 0;
+        for (Method method : controller.getDeclaredMethods()) {
+            if (!method.getName().equals("locationMenuButtonSpecs")) {
+                continue;
+            }
+            if (!method.getReturnType().getName().equals("java.util.List")) {
+                continue;
+            }
+            Class<?>[] parameters = method.getParameterTypes();
+            if (parameters.length < head.length || parameters.length > head.length + 1) {
+                continue;
+            }
+            boolean matches = true;
+            for (int i = 0; i < head.length; ++i) {
+                if (!parameters[i].getName().equals(head[i])) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches && parameters.length == head.length + 1) {
+                matches = parameters[head.length].getName().equals(STRUCTURE_MARKER_CLASS);
+            }
+            if (matches) {
+                matched = Math.max(matched, parameters.length);
+            }
+        }
+        return matched;
     }
 
     /**

@@ -26,9 +26,13 @@ public final class Waypoint {
     public String markerLabel = "";
     public final long createdAtEpochMs = 0L;
 
-    /** 桩里的嵌套枚举：真类是 `Waypoint$Type`（NORMAL / DEATH） */
+    /**
+     * 真类是 `Waypoint$Type`：0.1.16 只有 NORMAL / DEATH，0.1.18 末尾追加了 TEMPORARY
+     * （那类临时点在他们自己构造保存快照时就被丢掉了；api 层的 WaypointType 仍只有前两个值）。
+     */
     public enum Type {
         NORMAL,
-        DEATH
+        DEATH,
+        TEMPORARY
     }
 }

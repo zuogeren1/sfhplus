@@ -72,8 +72,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * （实测：拿真 jar 做 classpath，该类型的局部变量直接用不了）。Mixin 只能把代码合并进目标类，
  * 不能让我们的普通类进到那个包里，所以凡是“包级私有类型”的<b>实例</b>都只能用反射经手，
  * 而 {@code Bounds.buttonX()/buttonY(int)/buttonWidth()} 这类成员则是按字节码公式在
- * {@link ConfluxMenuOverlay} 里重算 —— conflux 0.1.16（26.1.2 与 26.2 两份 jar）
- * 里这些方法体逐条一致。
+ * {@link ConfluxMenuOverlay} 里重算 —— conflux 0.1.16 与 0.1.18 里这些方法体（以及
+ * {@code place(...)} 的面板高公式）逐条一致，差异只在参数表与热键槽位数。
  *
  * <p>所有注入体内部一律 {@code try/catch (Throwable)}：我们出问题最多不显示这几行，
  * 绝不允许影响到他们的地图界面。
@@ -81,7 +81,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /*
  * 隐式契约（动这块之前先读完，别再往包外搬）：
  * 本 mixin 里对 FullscreenMapLocationMenu 及其包级私有嵌套类型 Bounds / Target 的**任何**调用，
- * 都只能留在这个文件内。javap 实测（conflux 0.1.16，26.1.2 与 26.2 两份 jar 一致）：
+ * 都只能留在这个文件内。javap 实测（conflux 0.1.16 与 0.1.18 一致）：
  *   final class FullscreenMapLocationMenu$Bounds extends java.lang.Record   // 包级私有
  *   final class FullscreenMapLocationMenu$Target extends java.lang.Record   // 包级私有
  *   Bounds: public x()/y()/width()/height()，包私有 buttonX()/buttonY(int)/buttonWidth()/contains(double,double)
@@ -122,6 +122,10 @@ public abstract class ConfluxMapScreenMixin implements ConfluxMenuRowHost {
 
     /**
      * 注入没跑到（列表为空提前返回）时的兜底：位置菜单最常见的四条目。
+     *
+     * <p>0.1.18 起真正会画出来的行数可能更多：命中结构点时多一行 {@code LOOT}（4 → 5），
+     * 若同时还停在已保存的路径点上就是 6。所以这个常量只在「量不到原生行数」时兜底，
+     * 正常路径一律用 {@code locationMenuButtonSpecs} 返回列表的长度现量。
      *
      * <p>面板补齐与命中判定都以「原生条目数」为基准，量不到时不能塌成 0，否则我们的行会画到
      * 面板标题上、点击判定也会整体上移。
@@ -165,7 +169,7 @@ public abstract class ConfluxMapScreenMixin implements ConfluxMenuRowHost {
     @Unique
     private static Class<?> slimefunhelper$ACTION_CLASS;
 
-    /** 探测 hotkeyLabel(int) 时最多试到第几个下标（conflux 只有 5 个） */
+    /** 探测 hotkeyLabel(int) 时最多试到第几个下标（0.1.16 = 5 个、0.1.18 = 6 个） */
     @Unique
     private static final int slimefunhelper$HOTKEY_PROBE_LIMIT = 16;
 
@@ -180,8 +184,9 @@ public abstract class ConfluxMapScreenMixin implements ConfluxMenuRowHost {
     private static boolean slimefunhelper$hotkeySlotsProbed;
 
     /**
-     * conflux 自己会画数字提示的槽位数（探测一次后缓存）：新版 = {@code HOTKEY_KEYS.length} = 5，
-     * 没有这套提示的老版本 = 0。我们的行落在这些槽位里时数字由他们画，之外才由我们补。
+     * conflux 自己会画数字提示的槽位数（探测一次后缓存）：等于 {@code HOTKEY_KEYS.length}
+     * （0.1.16 = 5、0.1.18 = 6），没有这套提示的老版本 = 0。
+     * 我们的行落在这些槽位里时数字由他们画，之外才由我们补。
      */
     @Unique
     private static volatile int slimefunhelper$confluxHotkeySlotCount;
@@ -628,8 +633,9 @@ public abstract class ConfluxMapScreenMixin implements ConfluxMenuRowHost {
      *       teleportLocationButton}），{@code CLEAR_HIGHLIGHT} 落在那个空的 fall-through 分支里。
      *       之前借的 {@code TELEPORT} 会把他们那个 {@code teleportLocationButton} 覆盖成我们最后一行，
      *       连「传送目标不可用」的提示分支都会被带偏；</li>
-     *   <li><b>0.1.16 两份 jar 都有</b>：javap 实测 26.1.2 / 26.2 的
-     *       {@code Action} 都是同样这 11 个常量（含 {@code CLEAR_HIGHLIGHT}）。</li>
+     *   <li><b>0.1.16 / 0.1.18 都有</b>：javap 实测两版的 {@code Action} 都含
+     *       {@code CLEAR_HIGHLIGHT}（0.1.18 只是在末尾多了一个 {@code LOOT}，
+     *       而 {@code LOOT} 与它一样落在 switch 的空分支里）。</li>
      * </ul>
      *
      * <p><b>为什么还得这么小心</b>：正常路径上我们的行走不到 {@code runLocationAction} ——

@@ -1,5 +1,6 @@
 package me.zuogeren.slimefunhelperplus.module.conflux.mixin;
 
+import cn.net.rms.confluxmap.core.predict.StructureIndex;
 import cn.net.rms.confluxmap.core.waypoint.WaypointRenderEntry;
 import cn.net.rms.confluxmap.mc.ui.GuiDraw;
 import cn.net.rms.confluxmap.mc.ui.screen.FullscreenMapLocationMenu;
@@ -13,6 +14,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -28,10 +30,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *       那一刻地图内容已经画完、他们的面板 / 按钮 / 热键提示还没画，我们的线落在地图上、
  *       一定被他们的面板与控件盖住；</li>
  *   <li>{@code locationMenuButtonSpecs} 的 RETURN —— 把我们的条目追加进<b>他们随后逐条造按钮的那个列表</b>。
- *       0.1.16 的 {@code addLocationMenuButtons()} 读的是控制器自己的这个方法，屏幕上的同名方法只是转发；
+ *       {@code addLocationMenuButtons()} 读的是控制器自己的这个方法，屏幕上的同名方法只是转发；
  *       挂在屏幕上会「列表里有、按钮没有」，表现就是点得到、看不见。追加逻辑本身在屏幕的 mixin 里
  *       （要读包级私有的 {@code Bounds} 算标签宽度），这里通过 {@link ConfluxMenuRowHost} 回调过去。</li>
  * </ul>
+ *
+ * <p><b>同一个方法的两套签名各挂一条注入</b>：0.1.18 在 {@code Screen} 之前插入了
+ * {@code core.predict.StructureIndex$Marker}（右键命中的结构点），参数表从 4 参变 5 参。
+ * 两条注入都是 {@code require = 0}，因此同一份 jar 在 0.1.16 与 0.1.18 上都能生效：
+ * 目标方法不存在的那个版本只会静默跳过一条。方法选择器写成<b>完整描述符</b>，
+ * 一是免得两个重载之间选不中，二是改签名时能一眼看出对不上。
  *
  * <p><b>为什么用 {@code targets} 字符串 + {@code @Pseudo}</b>：目标类是包级私有的，
  * 源码里连类型名都写不出来；{@code @Pseudo} 保证「这个类不存在时」静默跳过而不是让 mixin 配置加载失败。
@@ -54,14 +62,49 @@ public abstract class ConfluxMenuControllerMixin {
         }
     }
 
+    /** 0.1.16 的 4 参 {@code locationMenuButtonSpecs(Target, WaypointRenderEntry, UUID, boolean)} */
     @SuppressWarnings("rawtypes")
-    @Inject(method = "locationMenuButtonSpecs", at = @At("RETURN"), require = 0)
+    @Inject(
+            method =
+                    "locationMenuButtonSpecs(Lcn/net/rms/confluxmap/mc/ui/screen/FullscreenMapLocationMenu$Target;Lcn/net/rms/confluxmap/core/waypoint/WaypointRenderEntry;Ljava/util/UUID;Z)Ljava/util/List;",
+            at = @At("RETURN"),
+            require = 0)
     private void slimefunhelper$appendMenuRows(
             FullscreenMapLocationMenu.Target target,
             WaypointRenderEntry waypoint,
             UUID playerId,
             boolean deletePending,
             CallbackInfoReturnable<List> cir) {
+        slimefunhelper$appendOurRows(cir);
+    }
+
+    /**
+     * 0.1.18 的 5 参 {@code locationMenuButtonSpecs(Target, WaypointRenderEntry, UUID, boolean, StructureIndex.Marker)}。
+     *
+     * <p>第 5 参是他们右键命中的结构点（没命中是 {@code null}）。它只会让原生按钮多出一行
+     * {@code LOOT}，对我们没有别的意义：追加点仍在 {@code RETURN}、原生行数仍按
+     * {@code cir.getReturnValue().size()} 现量，所以行号、面板补齐与热键数字都自动跟着走。
+     */
+    @SuppressWarnings("rawtypes")
+    @Inject(
+            method =
+                    "locationMenuButtonSpecs(Lcn/net/rms/confluxmap/mc/ui/screen/FullscreenMapLocationMenu$Target;Lcn/net/rms/confluxmap/core/waypoint/WaypointRenderEntry;Ljava/util/UUID;ZLcn/net/rms/confluxmap/core/predict/StructureIndex$Marker;)Ljava/util/List;",
+            at = @At("RETURN"),
+            require = 0)
+    private void slimefunhelper$appendMenuRowsStructureAware(
+            FullscreenMapLocationMenu.Target target,
+            WaypointRenderEntry waypoint,
+            UUID playerId,
+            boolean deletePending,
+            StructureIndex.Marker structure,
+            CallbackInfoReturnable<List> cir) {
+        slimefunhelper$appendOurRows(cir);
+    }
+
+    /** 两套签名共用的追加动作：只碰返回值，不关心参数表长什么样 */
+    @Unique
+    @SuppressWarnings("rawtypes")
+    private void slimefunhelper$appendOurRows(CallbackInfoReturnable<List> cir) {
         try {
             if (!ConfluxMapHooks.getInstance().isEnabled() || cir == null) {
                 return;
